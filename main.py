@@ -156,12 +156,15 @@ def build_recrutement_embed():
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
-    embed = build_recrutement_embed()
-    view = RecrutementView()
-    if recrutement_status["active"]:
-        await ctx.send(content="@everyone", embed=embed, view=view)
-    else:
-        await ctx.send(embed=embed, view=view)
+    try:
+        embed = build_recrutement_embed()
+        view = RecrutementView()
+        if recrutement_status["active"]:
+            await ctx.send(content="@everyone", embed=embed, view=view)
+        else:
+            await ctx.send(embed=embed, view=view)
+    except Exception as e:
+        await ctx.send(f"❌ Erreur lors de l'envoi : {e}")
 
 @bot.event
 async def on_ready():
