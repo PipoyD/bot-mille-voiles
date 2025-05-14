@@ -250,6 +250,10 @@ async def flottes(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.command()
+async def ping(ctx):
+    await ctx.send("pong")
+    
 # ---------------------- Événement on_ready ----------------------
 @bot.event
 async def on_ready():
