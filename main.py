@@ -163,6 +163,7 @@ def build_recrutement_embed():
 
 
 @bot.command()
+@commands.has_permissions(administrator=True)
 async def recrutement(ctx):
     embed = build_recrutement_embed()
     view = RecrutementView()
