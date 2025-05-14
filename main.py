@@ -140,7 +140,7 @@ class AdminToggleButton(Button):
             return
 
         recrutement_status["active"] = not recrutement_status["active"]
-        embed = build_recrutement_embed()
+        embed = build_recrutement_embed(interaction.guild)
         view = RecrutementView()
         await interaction.message.edit(embed=embed, view=view)
         await interaction.response.send_message(
