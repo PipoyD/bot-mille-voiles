@@ -170,3 +170,4 @@ async def recrutement(ctx):
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     bot.add_view(RecrutementView())  # 🔁 rend le bouton formulaire/admin persistant
+bot.run(os.environ['TOKEN'])
