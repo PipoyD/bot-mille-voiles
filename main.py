@@ -6,13 +6,11 @@ from discord.ui import Button, View, Modal, TextInput
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix='!', intents=intents)
 recrutement_status = {"active": True}
 
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
-
 
 def load_votes():
     try:
@@ -26,7 +24,6 @@ def save_votes():
         json.dump(vote_data, f)
 
 vote_data = load_votes()
-
 
 class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     nom_rp = TextInput(label="Nom RP", placeholder="Ex: Akira le Flamme", required=True)
@@ -53,7 +50,6 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         view.message = message
         vote_data[str(message.id)] = {}
         save_votes()
-
 
 class VoteView(View):
     def __init__(self):
@@ -99,7 +95,6 @@ class VoteView(View):
     async def vote_contre(self, interaction: discord.Interaction, button: Button):
         await self.handle_vote(interaction, "contre")
 
-
 class RecrutementView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -109,7 +104,6 @@ class RecrutementView(View):
         self.clear_items()
         self.add_item(FormulaireButton())
         self.add_item(AdminToggleButton())
-
 
 class FormulaireButton(Button):
     def __init__(self):
@@ -122,7 +116,6 @@ class FormulaireButton(Button):
             await interaction.response.send_message("🚫 Le recrutement est fermé.", ephemeral=True)
             return
         await interaction.response.send_modal(RecrutementModal())
-
 
 class AdminToggleButton(Button):
     def __init__(self):
@@ -142,7 +135,6 @@ class AdminToggleButton(Button):
             ephemeral=True
         )
 
-
 def build_recrutement_embed():
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
@@ -161,7 +153,6 @@ def build_recrutement_embed():
     )
     return embed
 
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
@@ -172,7 +163,7 @@ async def recrutement(ctx):
     else:
         await ctx.send(embed=embed, view=view)
 
-
-# ---- Lancement du bot ----
-token = os.environ['TOKEN']
-bot.run(token)
+@bot.event
+async def on_ready():
+    print(f"✅ Connecté en tant que {bot.user}")
+    bot.add_view(RecrutementView())  # 🔁 rend le bouton formulaire/admin persistant
