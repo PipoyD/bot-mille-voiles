@@ -150,22 +150,13 @@ class AdminToggleButton(Button):
 
 
 # ---------------------- Embed de recrutement ----------------------
-def get_effectif(guild: discord.Guild) -> int:
-    role = guild.get_role(RECRUTEUR_ROLE_ID)
-    if role is not None:
-        return len(role.members)
-    return 0
-
-def build_recrutement_embed(guild: discord.Guild):
+def build_recrutement_embed():
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
-    effectif = get_effectif(guild)
-
     embed = discord.Embed(
         title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
         description=(
-            f"> - **Statut des recrutements :** {statut}\n"
-            f"> - **Effectif :** {effectif} recruteur(s)\n\n"
+            f"> - **Statut des recrutements :** {statut}\n\n"
             "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
             "- **Nom RP :**\n"
             "- **Âge :**\n"
@@ -178,12 +169,11 @@ def build_recrutement_embed(guild: discord.Guild):
     return embed
 
 
-
 # ---------------------- Commande !recrutement ----------------------
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
-    embed = build_recrutement_embed(ctx.guild)
+    embed = build_recrutement_embed()
     view = RecrutementView()
     if recrutement_status["active"]:
         await ctx.send(content="@everyone", embed=embed, view=view)
