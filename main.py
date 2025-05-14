@@ -165,7 +165,7 @@ def build_recrutement_embed(guild: discord.Guild):
         title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
         description=(
             f"> - **Statut des recrutements :** {statut}\n"
-            f"> - **Effectif :** {effectif} membres\n\n"
+            f"> - **Effectif :** {effectif} membres /18\n\n"
             "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
             "- **Nom RP :**\n"
             "- **Âge :**\n"
