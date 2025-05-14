@@ -6,12 +6,14 @@ from discord.ui import Button, View, Modal, TextInput
 
 intents = discord.Intents.default()
 intents.message_content = True
+
 bot = commands.Bot(command_prefix='!', intents=intents)
 recrutement_status = {"active": True}
 
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
 
+# ---------------------- Votes persistants ----------------------
 def load_votes():
     try:
         with open(VOTE_FILE, "r") as f:
@@ -25,6 +27,8 @@ def save_votes():
 
 vote_data = load_votes()
 
+
+# ---------------------- Modal de formulaire ----------------------
 class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     nom_rp = TextInput(label="Nom RP", placeholder="Ex: Akira le Flamme", required=True)
     age = TextInput(label="Âge", placeholder="Ex: 17 ans", required=True)
@@ -51,6 +55,8 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         vote_data[str(message.id)] = {}
         save_votes()
 
+
+# ---------------------- Vue de vote ----------------------
 class VoteView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -87,14 +93,16 @@ class VoteView(View):
         if not interaction.response.is_done():
             await interaction.response.defer()
 
-    @discord.ui.button(label="✅ Pour", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id="vote_pour")
     async def vote_pour(self, interaction: discord.Interaction, button: Button):
         await self.handle_vote(interaction, "pour")
 
-    @discord.ui.button(label="❌ Contre", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="❌ Contre", style=discord.ButtonStyle.danger, custom_id="vote_contre")
     async def vote_contre(self, interaction: discord.Interaction, button: Button):
         await self.handle_vote(interaction, "contre")
 
+
+# ---------------------- Vue principale ----------------------
 class RecrutementView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -105,10 +113,12 @@ class RecrutementView(View):
         self.add_item(FormulaireButton())
         self.add_item(AdminToggleButton())
 
+
 class FormulaireButton(Button):
     def __init__(self):
         super().__init__(label="📋 Remplir le formulaire",
                          style=discord.ButtonStyle.primary,
+                         custom_id="formulaire_button",
                          disabled=not recrutement_status["active"])
 
     async def callback(self, interaction: discord.Interaction):
@@ -117,9 +127,12 @@ class FormulaireButton(Button):
             return
         await interaction.response.send_modal(RecrutementModal())
 
+
 class AdminToggleButton(Button):
     def __init__(self):
-        super().__init__(label="🛠️ Changer le statut", style=discord.ButtonStyle.secondary)
+        super().__init__(label="🛠️ Changer le statut",
+                         style=discord.ButtonStyle.secondary,
+                         custom_id="admin_toggle")
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
@@ -135,6 +148,8 @@ class AdminToggleButton(Button):
             ephemeral=True
         )
 
+
+# ---------------------- Embed de recrutement ----------------------
 def build_recrutement_embed():
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
@@ -153,21 +168,30 @@ def build_recrutement_embed():
     )
     return embed
 
+
+# ---------------------- Commande !recrutement ----------------------
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
-    try:
-        embed = build_recrutement_embed()
-        view = RecrutementView()
-        if recrutement_status["active"]:
-            await ctx.send(content="@everyone", embed=embed, view=view)
-        else:
-            await ctx.send(embed=embed, view=view)
-    except Exception as e:
-        await ctx.send(f"❌ Erreur lors de l'envoi : {e}")
+    embed = build_recrutement_embed()
+    view = RecrutementView()
+    if recrutement_status["active"]:
+        await ctx.send(content="@everyone", embed=embed, view=view)
+    else:
+        await ctx.send(embed=embed, view=view)
 
+
+# ---------------------- Événement on_ready ----------------------
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
-    bot.add_view(RecrutementView())  # 🔁 rend le bouton formulaire/admin persistant
-bot.run(os.environ['TOKEN'])
+    bot.add_view(RecrutementView())
+    bot.add_view(VoteView())  # pour garder les boutons de vote persistants
+
+
+# ---------------------- Lancement sécurisé ----------------------
+token = os.getenv("TOKEN")
+if not token:
+    print("❌ Token manquant dans les variables d'environnement.")
+else:
+    bot.run(token)
