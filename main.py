@@ -6,6 +6,7 @@ from discord.ui import Button, View, Modal, TextInput
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 recrutement_status = {"active": True}
@@ -165,7 +166,7 @@ def build_recrutement_embed(guild: discord.Guild):
         title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
         description=(
             f"> - **Statut des recrutements :** {statut}\n"
-            f"> - **Effectif :** {effectif} membres /18\n\n"
+            f"> - **Effectif :** {effectif}/18\n\n"
             "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
             "- **Nom RP :**\n"
             "- **Âge :**\n"
