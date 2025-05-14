@@ -6,7 +6,6 @@ from discord.ui import Button, View, Modal, TextInput
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 recrutement_status = {"active": True}
@@ -76,7 +75,7 @@ class VoteView(View):
 
     async def handle_vote(self, interaction, choix):
         if not any(role.id == RECRUTEUR_ROLE_ID for role in interaction.user.roles):
-            await interaction.response.send_message("🚫 Seuls les membres de l'équipage peuvent voter.", ephemeral=True)
+            await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
             return
 
         user_id = str(interaction.user.id)
@@ -141,7 +140,7 @@ class AdminToggleButton(Button):
             return
 
         recrutement_status["active"] = not recrutement_status["active"]
-        embed = build_recrutement_embed(interaction.guild)
+        embed = build_recrutement_embed()
         view = RecrutementView()
         await interaction.message.edit(embed=embed, view=view)
         await interaction.response.send_message(
@@ -166,7 +165,7 @@ def build_recrutement_embed(guild: discord.Guild):
         title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
         description=(
             f"> - **Statut des recrutements :** {statut}\n"
-            f"> - **Effectif :** {effectif}/18\n\n"
+            f"> - **Effectif :** {effectif} recruteur(s)\n\n"
             "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
             "- **Nom RP :**\n"
             "- **Âge :**\n"
