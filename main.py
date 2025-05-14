@@ -183,7 +183,7 @@ def build_recrutement_embed(guild: discord.Guild):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
-    embed = build_recrutement_embed()
+    embed = build_recrutement_embed(ctx.guild)
     view = RecrutementView()
     if recrutement_status["active"]:
         await ctx.send(content="@everyone", embed=embed, view=view)
