@@ -290,9 +290,23 @@ async def flottes(ctx):
     embed = build_flotte_embed(ctx.guild)
     await ctx.send(embed=embed, view=FlotteView())
 
-# ---------- PRIMES AUTOMATIQUES ----------
+# Chargement des primes
+def load_primes():
+    try:
+        with open(PRIME_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
-PRIME_FILE = "primes.json"
+def save_primes(data):
+    with open(PRIME_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+# Formatage des primes
+def format_prime(prime):
+    return f"{prime:,}".replace(",", " ") + " Berrys"
+
+# Détermination du rang
 RANKS = [
     (3_200_000_000, "Empereur Pirate", "👑"),
     (1_150_000_000, "SuperNova", "🚀"),
@@ -307,24 +321,6 @@ RANKS = [
     (500_000, "Rang E", "⚪"),
     (0, "Rookie", "💤")
 ]
-FLOTTE_EMOJIS = {
-    "ECARLATE": "🔴",
-    "AZUR": "🔵"
-}
-
-def load_primes():
-    try:
-        with open(PRIME_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_primes(data):
-    with open(PRIME_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-def format_prime(prime):
-    return f"{prime:,}".replace(",", " ") + " Berrys"
 
 def get_rank(prime):
     for value, label, emoji in RANKS:
@@ -332,6 +328,7 @@ def get_rank(prime):
             return label, emoji
     return "Inconnu", "❓"
 
+# Vue pour les primes
 class PrimeView(View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -350,6 +347,7 @@ class PrimeView(View):
             return
         await interaction.response.send_modal(UpdatePrimesModal(self.guild))
 
+# Modal pour la mise à jour des primes
 class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
     input = TextInput(label="Copiez-collez ici les nouvelles primes", style=discord.TextStyle.paragraph, placeholder="Ex: Mounir San: 45,357,752", required=True)
 
@@ -375,8 +373,7 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
         await interaction.message.edit(embed=embed, view=PrimeView(self.guild))
         await interaction.response.send_message("✅ Primes mises à jour avec succès !", ephemeral=True)
 
-# ... tout ton code est intact jusqu'à build_prime_embed()
-
+# Construction de l'embed des primes
 def build_prime_embed(guild):
     prime_data = load_primes()
     roles_by_category = {
@@ -396,6 +393,10 @@ def build_prime_embed(guild):
         "ECARLATE": 1371942480316203018,
         "AZUR": 1371942559894736916,
     }
+    FLOTTE_EMOJIS = {
+        "ECARLATE": "🔴",
+        "AZUR": "🔵"
+    }
 
     def flotte_emoji(member):
         for key, role_id in ROLES.items():
@@ -411,28 +412,23 @@ def build_prime_embed(guild):
         for role in types:
             members = [m for m in guild.members if discord.utils.get(m.roles, id=ROLES[role]) and not m.bot]
             for m in members:
-                if m.id in déjà_affichés:
-                    continue
-
-                pseudo = m.display_name.strip().replace("@", "")
-                prime = prime_data.get(pseudo)
-
-                if prime is None:
-                    fallback = m.name.strip().replace("@", "")
-                    prime = prime_data.get(fallback, 0)
-
-                rank, emoji = get_rank(prime)
-                group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
-                déjà_affichés.add(m.id)
-
+                if m.id not in déjà_affichés:
+                    name_display = m.display_name.strip().replace("@", "")
+                    prime = prime_data.get(name_display)
+                    if prime is None:
+                        name_fallback = m.name.strip().replace("@", "")
+                        prime = prime_data.get(name_fallback, 0)
+                    rank, emoji = get_rank(prime)
+                    group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
+                    déjà_affichés.add(m.id)
         if group:
             sorted_group = sorted(group, key=lambda x: x[0], reverse=True)
-            embed.add_field(name=titre, value="\n".join(x[1] for x in sorted_group), inline=False)
+            embed.add_field(name=titre, value="\n".join([x[1] for x in sorted_group]), inline=False)
 
     embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
     return embed
 
-
+# Commande pour afficher les primes
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def prime(ctx):
