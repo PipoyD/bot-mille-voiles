@@ -307,16 +307,24 @@ ILE_COFFRES = {
 }
 class CoffreNavigationView(View):
     def __init__(self, ile, index, interaction_user_id):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)  # 10 minutes = 600 secondes
         self.ile = ile
         self.index = index
         self.interaction_user_id = interaction_user_id
+        self.message = None  # Stocke le message à supprimer
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.interaction_user_id:
             await interaction.response.send_message("🚫 Ce menu ne t'est pas destiné.", ephemeral=True)
             return False
         return True
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.delete()
+            except discord.NotFound:
+                pass
 
     @discord.ui.button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary)
     async def previous(self, interaction: discord.Interaction, button: Button):
@@ -354,6 +362,7 @@ class IleSelect(discord.ui.Select):
 
         ile = self.values[0]
         index = 0
+        view = CoffreNavigationView(ile, index, interaction.user.id)
         emplacement = ILE_COFFRES[ile][index]
         embed = discord.Embed(
             title=f"📦 Emplacement du coffre ({ile})",
@@ -361,7 +370,8 @@ class IleSelect(discord.ui.Select):
             color=0xFFD700
         )
         embed.set_image(url=emplacement["img"])
-        await interaction.response.edit_message(embed=embed, view=CoffreNavigationView(ile, index, self.user_id))
+        await interaction.response.edit_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
 
 class IleSelectView(View):
     def __init__(self, user_id):
