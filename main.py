@@ -40,7 +40,7 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     async def on_submit(self, interaction: discord.Interaction):
         display_name = interaction.user.display_name
         embed = discord.Embed(title="📋 Nouvelle Candidature",
-                              description=f"👤 **Candidat :** {display_name}",
+                              description=f"👤 **Candidat :** {interaction.user.mention}",
                               color=0x2f3136)
         embed.add_field(name="Nom RP", value=self.nom_rp.value, inline=False)
         embed.add_field(name="Âge", value=self.age.value, inline=False)
@@ -181,6 +181,7 @@ def build_recrutement_embed():
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
+    await ctx.message.delete()
     embed = build_recrutement_embed()
     view = RecrutementView()
     await ctx.send(embed=embed, view=view)
@@ -286,6 +287,7 @@ def build_flotte_embed(guild):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def flottes(ctx):
+    await ctx.message.delete()
     embed = build_flotte_embed(ctx.guild)
     await ctx.send(embed=embed, view=FlotteView())
 
@@ -369,6 +371,7 @@ class IleSelectView(View):
 @bot.command()
 async def coffre(ctx):
     if not any(role.id == RECRUTEUR_ROLE_ID for role in ctx.author.roles):
+        await ctx.message.delete()
         await ctx.send("🚫 Tu n'as pas accès à cette commande.", delete_after=10)
         return
 
