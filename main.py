@@ -204,7 +204,7 @@ def build_flotte_embed(guild):
     embed = discord.Embed(
         title="⚓ • Équipage : Les Mille Voiles • ⚓",
         description=f"**Effectif total :** {len(membres_equipage)} membres",
-        color=0x3498db
+        color=0xFFA500
     )
 
     déjà_affichés = set()
