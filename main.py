@@ -380,11 +380,12 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
 def build_prime_embed(guild):
     prime_data = load_primes()
     roles_by_category = {
-        "🧭 Capitainerie": ["CAPITAINE", "VICE_CAPITAINE"],
-        "🛡️ Commandants": ["COMMANDANT"],
-        "🗡️ Vice-Commandants": ["VICE_COMMANDANT"],
-        "🎖️ Lieutenants": ["LIEUTENANT"],
-        "👥 Membres": ["MEMBRE"]
+        "**👑 Capitaine**": ["CAPITAINE"],
+        "**🗡️ Vice-Capitaine**": ["VICE_CAPITAINE"],
+        "**🛡️ Commandants**": ["COMMANDANT"],
+        "**🗡️ Vice-Commandants**": ["VICE_COMMANDANT"],
+        "**🎖️ Lieutenants**": ["LIEUTENANT"],
+        "**👥 Membres**": ["MEMBRE"]
     }
     ROLES = {
         "CAPITAINE": 1317851007358734396,
@@ -427,6 +428,8 @@ def build_prime_embed(guild):
         if group:
             sorted_group = sorted(group, key=lambda x: x[0], reverse=True)
             embed.add_field(name=titre, value="\n".join([x[1] for x in sorted_group]), inline=False)
+
+    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
 
     embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
     return embed
