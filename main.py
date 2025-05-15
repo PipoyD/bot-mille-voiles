@@ -301,25 +301,31 @@ async def on_ready():
     bot.add_view(FlotteView())
 
     try:
-        channel = await bot.fetch_channel(1358037356749394111)
-        async for message in channel.history(limit=200):  # Ajuste le nombre si nécessaire
+        channel = await bot.fetch_channel(1371557531373277376)
+
+        async for message in channel.history(limit=200):  # Scanne jusqu’à 200 messages
             if message.author.id != bot.user.id:
                 continue
 
-            # Vérifie si c'est bien une candidature
-            if message.embeds and message.embeds[0].title == "📋 Nouvelle Candidature":
-                class RestoredVoteView(VoteView):
-                    def __init__(self, message):
-                        super().__init__(timeout=None)
-                        self.message = message
+            if not message.embeds:
+                continue
 
-                view = RestoredVoteView(message)
-                await message.edit(view=view)
-                print(f"🔁 Boutons restaurés pour le message {message.id}")
+            embed = message.embeds[0]
+            if embed.title != "📋 Nouvelle Candidature":
+                continue
+
+            # Associe le message au vote
+            class VoteViewRestore(VoteView):
+                def __init__(self, msg):
+                    super().__init__(timeout=None)
+                    self.message = msg
+
+            view = VoteViewRestore(message)
+            await message.edit(view=view)
+            print(f"🔁 Boutons restaurés pour : {message.id}")
+
     except Exception as e:
-        print(f"❌ Erreur restauration des vues : {e}")
-
-
+        print(f"❌ Erreur restauration des boutons : {e}")
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
