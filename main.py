@@ -247,13 +247,13 @@ def build_flotte_embed(guild):
         inline=False
     )
 
-    embed.add_field(name="__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
+    embed.add_field(name="<:1reflotte:1372158546531324004>__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
     embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["ECARLATE"])), inline=False)
 
-    embed.add_field(name="__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
+    embed.add_field(name="<:2meflotte:1372158586951696455>__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
     embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["AZUR"])), inline=False)
@@ -389,8 +389,8 @@ def build_prime_embed(guild):
         "AZUR": 1371942559894736916,
     }
     FLOTTE_EMOJIS = {
-        "ECARLATE": "🔴",
-        "AZUR": "🔵"
+        "ECARLATE": "<:1reflotte:1372158546531324004>",
+        "AZUR": "<:2meflotte:1372158586951696455>"
     }
 
     def flotte_emoji(member):
