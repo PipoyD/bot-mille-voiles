@@ -237,10 +237,24 @@ def build_flotte_embed(guild):
     embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["AZUR"])), inline=False)
 
     embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
-    lieutenants_sans = [m.mention for m in filter_unique(ROLES["LIEUTENANT"]) if m.id not in déjà_affichés]
+    
+    # Lieutenants sans flotte
+    lieutenants_sans = [
+        m.mention for m in filter_unique(ROLES["LIEUTENANT"])
+        if m.id not in déjà_affichés
+    ]
     embed.add_field(name="🎖️ Lieutenants sans flotte :", value="\n".join(lieutenants_sans) or "Aucun", inline=False)
-    membres_sans = [m.mention for m in filter_unique(ROLES["MEMBRE"]) if m.id not in déjà_affichés]
+    
+    # Membres sans flotte (qui n'ont QUE le rôle MEMBRE)
+    membres_sans = [
+        m.mention for m in guild.members
+        if discord.utils.get(m.roles, id=ROLES["MEMBRE"])
+        and len([r for r in m.roles if r.id in ROLES.values()]) == 1
+        and m.id not in déjà_affichés
+    ]
+    
     embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans) or "Aucun", inline=False)
+
 
     return embed
 
