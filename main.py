@@ -295,14 +295,14 @@ async def flottes(ctx):
 
 ILE_COFFRES = {
     "Logue Town": [
-        {"desc": "Derrière Fushia News", "img": "https://imgur.com/BaLuctc"},
-        {"desc": "Rue à droite en face de la Mairie", "img": "https://imgur.com/Ls3L6H2"},
-        {"desc": "Batiment collé à gauche du QG Marine", "img": "https://imgur.com/UHVFxLY"},
-        {"desc": "Derrière la Mairie", "img": "https://imgur.com/zMKd2ts"},
-        {"desc": "Batiment à droite de la Banque entre la falaise", "img": "https://imgur.com/HMmEMpW"},
-        {"desc": "Ruelle diagonale à droite du bar", "img": "https://imgur.com/WHcRTW2"},
-        {"desc": "Maison du Phare", "img": "https://imgur.com/vvKqaX3"},
-    ],
+        {"desc": "Derrière Fushia News", "img": "https://i.imgur.com/BaLuctc.png"},
+        {"desc": "Rue à droite en face de la Mairie", "img": "https://i.imgur.com/Ls3L6H2.png"},
+        {"desc": "Batiment collé à gauche du QG Marine", "img": "https://i.imgur.com/UHVFxLY.png"},
+        {"desc": "Derrière la Mairie", "img": "https://i.imgur.com/zMKd2ts.png"},
+        {"desc": "Batiment à droite de la Banque entre la falaise", "img": "https://i.imgur.com/HMmEMpW.png"},
+        {"desc": "Ruelle diagonale à droite du bar", "img": "https://i.imgur.com/WHcRTW2.png"},
+        {"desc": "Maison du Phare", "img": "https://i.imgur.com/vvKqaX3.png"},
+    ]
     "Arlong Park": [
         {"desc": "Sous le pont cassé", "img": "https://example.com/image1.jpg"},
         {"desc": "Derrière la statue de requin", "img": "https://example.com/image2.jpg"},
