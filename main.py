@@ -331,12 +331,14 @@ def get_rank(prime):
 
 # Vue pour les primes
 class PrimeView(View):
-    def __init__(self, guild):
+    def __init__(self, guild=None):
         super().__init__(timeout=None)
         self.guild = guild
 
     @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_prime")
     async def refresh(self, interaction: discord.Interaction, button: Button):
+        if not self.guild:
+            self.guild = interaction.guild
         embed = build_prime_embed(self.guild)
         await interaction.message.edit(embed=embed, view=self)
         await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
@@ -346,7 +348,7 @@ class PrimeView(View):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
             return
-        await interaction.response.send_modal(UpdatePrimesModal(self.guild))
+        await interaction.response.send_modal(UpdatePrimesModal(interaction.guild))
 
 # Modal pour la mise à jour des primes
 class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
