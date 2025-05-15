@@ -3,6 +3,7 @@ import discord
 import json
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
+from datetime import datetime
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -237,12 +238,9 @@ def build_flotte_embed(guild):
     embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["AZUR"])), inline=False)
 
     embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
-    
-    # Lieutenants sans flotte
     lieutenants_sans = filtrer(ROLES["LIEUTENANT"])
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(lieutenants_sans), inline=False)
     
-    # Membres sans flotte : uniquement ceux qui ont exclusivement le rôle MEMBRE
     def membres_sans_flotte():
         result = []
         for m in guild.members:
@@ -258,6 +256,12 @@ def build_flotte_embed(guild):
     
     embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
     embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
+
+    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
+    embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
+    
+    now = datetime.now().strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
+    embed.set_footer(text=now)
 
     return embed
 
