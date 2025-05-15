@@ -239,19 +239,19 @@ def build_flotte_embed(guild):
         return result or ["N/A"]
 
     embed.add_field(
-        name="__**🧭 Capitainerie :**__",
+        name="<:equipage:1358154724423106781>__** Capitainerie :**__",
         value=f"👑 **Capitaine :** {filtrer(ROLES['CAPITAINE'])[0]}\n"
               f"🗡️ **Vice-Capitaine :** {filtrer(ROLES['VICE_CAPITAINE'])[0]}",
         inline=False
     )
 
-    embed.add_field(name="__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
+    embed.add_field(name="<:2meflotte:1372158586951696455>__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
     embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["ECARLATE"])), inline=False)
 
-    embed.add_field(name="__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
+    embed.add_field(name="<:1reflotte:1372158546531324004>__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
     embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["AZUR"])), inline=False)
