@@ -301,25 +301,28 @@ async def on_ready():
     bot.add_view(FlotteView())
 
     try:
-        channel = await bot.fetch_channel(1358037356749394111)
+        channel = await bot.fetch_channel(1371557531373277376)
         for msg_id in vote_data.keys():
             try:
                 msg_id_int = int(msg_id)
                 message = await channel.fetch_message(msg_id_int)
 
-                # Associer la vue restaurée avec le message
+                class RestoredVoteView(VoteView):
+                    def __init__(self, message):
+                        super().__init__(timeout=None)
+                        self.message = message
+
                 view = RestoredVoteView(message)
-                await bot.add_view(view)  # Ajout de la vue à la vue globale du bot
-                print(f"🔁 Vue restaurée pour le message {msg_id_int} dans #{channel.name}")
+                await message.edit(view=view)
+                print(f"🔁 Vue restaurée pour {msg_id_int} dans #{channel.name}")
 
             except discord.NotFound:
                 print(f"❌ Message non trouvé : {msg_id}")
             except discord.Forbidden:
                 print(f"🚫 Accès interdit au message : {msg_id}")
-            except Exception as e:
-                print(f"❌ Erreur lors de la récupération du message {msg_id_int}: {e}")
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération du salon de vote : {e}")
+        print(f"❌ Erreur récupération salon votes : {e}")
+
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
