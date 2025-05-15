@@ -287,9 +287,6 @@ def build_flotte_embed(guild):
     
     embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
     embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
-
-    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
-    embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
     
     paris = pytz.timezone("Europe/Paris")
     now = datetime.now(paris).strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
