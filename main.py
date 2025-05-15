@@ -50,24 +50,29 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
         message = await interaction.channel.send(content=f"<@&{RECRUTEUR_ROLE_ID}>", embed=embed)
-        view = VoteView(message.id)
+        view = VoteView()
         await message.edit(view=view)
         vote_data[str(message.id)] = {}
         save_votes()
         await interaction.response.send_message("✅ Candidature envoyée avec succès !", ephemeral=True)
 class VoteView(View):
-    def __init__(self, message_id: int):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.message_id = message_id
-        self.add_item(Button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id=f"vote_pour_{message_id}"))
-        self.add_item(Button(label="❌ Contre", style=discord.ButtonStyle.danger, custom_id=f"vote_contre_{message_id}"))
+
+    @discord.ui.button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id="vote_pour")
+    async def vote_pour(self, interaction: discord.Interaction, button: Button):
+        await self.handle_vote(interaction, "pour")
+
+    @discord.ui.button(label="❌ Contre", style=discord.ButtonStyle.danger, custom_id="vote_contre")
+    async def vote_contre(self, interaction: discord.Interaction, button: Button):
+        await self.handle_vote(interaction, "contre")
 
     async def handle_vote(self, interaction: discord.Interaction, choix: str):
         if not any(role.id == RECRUTEUR_ROLE_ID for role in interaction.user.roles):
             await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
             return
 
-        msg_id = str(self.message_id)
+        msg_id = str(interaction.message.id)
         user_id = str(interaction.user.id)
         votes = vote_data.setdefault(msg_id, {})
         current_vote = votes.get(user_id)
@@ -79,16 +84,14 @@ class VoteView(View):
 
         save_votes()
 
-        channel = interaction.channel
         try:
-            message = await channel.fetch_message(self.message_id)
-            embed = message.embeds[0]
+            embed = interaction.message.embeds[0]
             pour = sum(1 for v in votes.values() if v == "pour")
             contre = sum(1 for v in votes.values() if v == "contre")
             color = 0x00ff00 if pour > contre else 0xff0000 if contre > pour else 0x2f3136
             embed.color = color
             embed.set_footer(text=f"Votes : ✅ {pour} | ❌ {contre}")
-            await message.edit(embed=embed, view=self)
+            await interaction.message.edit(embed=embed, view=self)
         except Exception as e:
             print(f"❌ Erreur lors de la mise à jour du message : {e}")
 
