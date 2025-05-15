@@ -57,12 +57,6 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         vote_data[str(message.id)] = {}
         save_votes()
 
-# ---------------------- Vue de vote restaurée ----------------------
-class RestoredVoteView(VoteView):
-    def __init__(self, message):
-        super().__init__()
-        self.message = message
-        
 # ---------------------- Vue de vote ----------------------
 class VoteView(View):
     def __init__(self):
@@ -113,6 +107,12 @@ class VoteView(View):
     async def vote_contre(self, interaction: discord.Interaction, button: Button):
         await self.handle_vote(interaction, "contre")
 
+# ---------------------- Vue de vote restaurée ----------------------
+class RestoredVoteView(VoteView):
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+        
 # ---------------------- Vue principale ----------------------
 class RecrutementView(View):
     def __init__(self):
@@ -301,7 +301,7 @@ async def on_ready():
     bot.add_view(FlotteView())
 
     try:
-        channel = await bot.fetch_channel(1371557531373277376)
+        channel = await bot.fetch_channel(1358037356749394111)
         for msg_id in vote_data.keys():
             try:
                 msg_id_int = int(msg_id)
