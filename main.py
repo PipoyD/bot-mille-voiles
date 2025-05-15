@@ -335,14 +335,6 @@ class PrimeView(View):
         super().__init__(timeout=None)
         self.guild = guild
 
-    @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_prime")
-    async def refresh(self, interaction: discord.Interaction, button: Button):
-        if not self.guild:
-            self.guild = interaction.guild
-        embed = build_prime_embed(self.guild)
-        await interaction.message.edit(embed=embed, view=self)
-        await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
-
     @discord.ui.button(label="📝 Mettre à jour les primes", style=discord.ButtonStyle.primary, custom_id="edit_primes")
     async def edit(self, interaction: discord.Interaction, button: Button):
         if not interaction.user.guild_permissions.administrator:
