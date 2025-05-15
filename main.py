@@ -358,11 +358,11 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
         super().__init__()
         self.guild = guild
 
-     async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction):
         guild = self.guild
         new_data = self.input.value
         prime_data = load_primes()
-    
+
         # Étape 1 : noms valides (membres avec rôle concerné)
         ROLES = {
             "CAPITAINE": 1317851007358734396,
@@ -372,13 +372,13 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
             "LIEUTENANT": 1358030829225381908,
             "MEMBRE": 1317850709948891177,
         }
-    
+
         membres_valides = [
             m for m in guild.members
             if any(discord.utils.get(m.roles, id=rid) for rid in ROLES.values()) and not m.bot
         ]
         noms_valides = {m.display_name.strip().replace("@", ""): m for m in membres_valides}
-    
+
         # Étape 2 : appliquer les changements pour noms valides uniquement
         lignes = new_data.split("\n")
         for ligne in lignes:
@@ -386,18 +386,18 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
                 nom, valeur = ligne.split(":", 1)
                 nom = nom.strip()
                 if nom not in noms_valides:
-                    continue  # Ignore les noms invalides
+                    continue
                 try:
                     valeur = int(valeur.replace(",", "").replace(" ", ""))
                 except ValueError:
                     valeur = 0
                 prime_data[nom] = valeur
-    
+
         # Étape 3 : ajouter les membres manquants dans le JSON
         for nom in noms_valides:
             if nom not in prime_data:
                 prime_data[nom] = 0
-    
+
         save_primes(prime_data)
         embed = build_prime_embed(guild)
         await interaction.message.edit(embed=embed, view=PrimeView(guild))
