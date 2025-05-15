@@ -81,24 +81,29 @@ class VoteView(View):
         await self.message.edit(embed=embed, view=self)
 
     async def handle_vote(self, interaction, choix):
-        if not any(role.id == RECRUTEUR_ROLE_ID for role in interaction.user.roles):
-            await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
-            return
+        try:
+            if not any(role.id == RECRUTEUR_ROLE_ID for role in interaction.user.roles):
+                await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
+                return
+    
+            user_id = str(interaction.user.id)
+            msg_id = str(self.message.id)
+            votes = vote_data.setdefault(msg_id, {})
+            current_vote = votes.get(user_id)
+    
+            if current_vote == choix:
+                del votes[user_id]
+            else:
+                votes[user_id] = choix
+    
+            save_votes()
+            await self.update_embed()
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Une erreur est survenue : {str(e)}", ephemeral=True)
+            print(f"Erreur dans le traitement du vote : {e}")
 
-        user_id = str(interaction.user.id)
-        msg_id = str(self.message.id)
-        votes = vote_data.setdefault(msg_id, {})
-        current_vote = votes.get(user_id)
-
-        if current_vote == choix:
-            del votes[user_id]
-        else:
-            votes[user_id] = choix
-
-        save_votes()
-        await self.update_embed()
-        if not interaction.response.is_done():
-            await interaction.response.defer()
 
     @discord.ui.button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id="vote_pour")
     async def vote_pour(self, interaction: discord.Interaction, button: Button):
@@ -302,17 +307,19 @@ async def on_ready():
                 msg_id_int = int(msg_id)
                 message = await channel.fetch_message(msg_id_int)
 
+                # Associer la vue restaurée avec le message
                 view = RestoredVoteView(message)
-                bot.add_view(view, message_id=msg_id_int)
+                await bot.add_view(view)  # Ajout de la vue à la vue globale du bot
                 print(f"🔁 Vue restaurée pour le message {msg_id_int} dans #{channel.name}")
 
             except discord.NotFound:
                 print(f"❌ Message non trouvé : {msg_id}")
             except discord.Forbidden:
                 print(f"🚫 Accès interdit au message : {msg_id}")
+            except Exception as e:
+                print(f"❌ Erreur lors de la récupération du message {msg_id_int}: {e}")
     except Exception as e:
         print(f"❌ Erreur lors de la récupération du salon de vote : {e}")
-
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
