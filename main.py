@@ -289,6 +289,143 @@ async def flottes(ctx):
     embed = build_flotte_embed(ctx.guild)
     await ctx.send(embed=embed, view=FlotteView())
 
+# ---------- PRIMES AUTOMATIQUES ----------
+
+PRIME_FILE = "primes.json"
+RANKS = [
+    (3_200_000_000, "Empereur Pirate", "👑"),
+    (1_150_000_000, "SuperNova", "🚀"),
+    (300_000_000, "Rang Z", "💎"),
+    (200_000_000, "Rang S+", "🔥"),
+    (150_000_000, "Rang S", "🔴"),
+    (60_000_000, "Rang A+", "🟠"),
+    (30_000_000, "Rang A", "🟡"),
+    (15_000_000, "Rang B", "🟢"),
+    (5_000_000, "Rang C", "🔵"),
+    (1_000_000, "Rang D", "🟣"),
+    (500_000, "Rang E", "⚪"),
+    (0, "Rookie", "💤")
+]
+FLOTTE_EMOJIS = {
+    "ECARLATE": "🔴",
+    "AZUR": "🔵"
+}
+
+def load_primes():
+    try:
+        with open(PRIME_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_primes(data):
+    with open(PRIME_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def format_prime(prime):
+    return f"{prime:,}".replace(",", " ") + " Berrys"
+
+def get_rank(prime):
+    for value, label, emoji in RANKS:
+        if prime >= value:
+            return label, emoji
+    return "Inconnu", "❓"
+
+class PrimeView(View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+
+    @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_prime")
+    async def refresh(self, interaction: discord.Interaction, button: Button):
+        embed = build_prime_embed(self.guild)
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
+
+    @discord.ui.button(label="📝 Mettre à jour les primes", style=discord.ButtonStyle.primary, custom_id="edit_primes")
+    async def edit(self, interaction: discord.Interaction, button: Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
+            return
+        await interaction.response.send_modal(UpdatePrimesModal(self.guild))
+
+class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
+    input = TextInput(label="Copiez-collez ici les nouvelles primes", style=discord.TextStyle.paragraph, placeholder="Ex: Mounir San: 45,357,752", required=True)
+
+    def __init__(self, guild):
+        super().__init__()
+        self.guild = guild
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_data = self.input.value
+        prime_data = load_primes()
+        lignes = new_data.split("\n")
+        for ligne in lignes:
+            if ":" in ligne:
+                nom, valeur = ligne.split(":", 1)
+                nom = nom.strip()
+                valeur = int(valeur.replace(",", "").replace(" ", ""))
+                prime_data[nom] = valeur
+        save_primes(prime_data)
+        embed = build_prime_embed(self.guild)
+        await interaction.message.edit(embed=embed, view=PrimeView(self.guild))
+        await interaction.response.send_message("✅ Primes mises à jour avec succès !", ephemeral=True)
+
+def build_prime_embed(guild):
+    prime_data = load_primes()
+    roles_by_category = {
+        "🧭 Capitainerie": ["CAPITAINE", "VICE_CAPITAINE"],
+        "🛡️ Commandants": ["COMMANDANT"],
+        "🗡️ Vice-Commandants": ["VICE_COMMANDANT"],
+        "🎖️ Lieutenants": ["LIEUTENANT"],
+        "👥 Membres": ["MEMBRE"]
+    }
+    ROLES = {
+        "CAPITAINE": 1317851007358734396,
+        "VICE_CAPITAINE": 1358079100203569152,
+        "COMMANDANT": 1358031308542181382,
+        "VICE_COMMANDANT": 1358032259596288093,
+        "LIEUTENANT": 1358030829225381908,
+        "MEMBRE": 1317850709948891177,
+        "ECARLATE": 1371942480316203018,
+        "AZUR": 1371942559894736916,
+    }
+
+    def flotte_emoji(member):
+        for key, role_id in ROLES.items():
+            if key in FLOTTE_EMOJIS and discord.utils.get(member.roles, id=role_id):
+                return FLOTTE_EMOJIS[key]
+        return ""
+
+    embed = discord.Embed(title="📜 Primes & Rangs", color=0x00ffcc)
+    déjà_affichés = set()
+
+    for titre, types in roles_by_category.items():
+        group = []
+        for role in types:
+            members = [m for m in guild.members if discord.utils.get(m.roles, id=ROLES[role]) and not m.bot]
+            for m in members:
+                if m.id not in déjà_affichés:
+                    name = m.display_name
+                    prime = prime_data.get(name, 0)
+                    rank, emoji = get_rank(prime)
+                    group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
+                    déjà_affichés.add(m.id)
+        if group:
+            sorted_group = sorted(group, key=lambda x: x[0], reverse=True)
+            embed.add_field(name=titre, value="\n".join([x[1] for x in sorted_group]), inline=False)
+
+    embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
+    return embed
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def prime(ctx):
+    embed = build_prime_embed(ctx.guild)
+    view = PrimeView(ctx.guild)
+    await ctx.send(embed=embed, view=view)
+
+
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
 if not token:
