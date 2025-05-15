@@ -13,6 +13,7 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 recrutement_status = {"active": True}
 
+PRIME_FILE = "primes.json"
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
 VOTE_CHANNEL_ID = 1371557531373277376
