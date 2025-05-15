@@ -301,7 +301,7 @@ async def on_ready():
     bot.add_view(FlotteView())
 
     try:
-        channel = await bot.fetch_channel(1371557531373277376)
+        channel = await bot.fetch_channel(1358037356749394111)
 
         async for message in channel.history(limit=200):  # Scanne jusqu’à 200 messages
             if message.author.id != bot.user.id:
