@@ -375,6 +375,8 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
         await interaction.message.edit(embed=embed, view=PrimeView(self.guild))
         await interaction.response.send_message("✅ Primes mises à jour avec succès !", ephemeral=True)
 
+# ... tout ton code est intact jusqu'à build_prime_embed()
+
 def build_prime_embed(guild):
     prime_data = load_primes()
     roles_by_category = {
@@ -409,24 +411,27 @@ def build_prime_embed(guild):
         for role in types:
             members = [m for m in guild.members if discord.utils.get(m.roles, id=ROLES[role]) and not m.bot]
             for m in members:
-                if m.id not in déjà_affichés:
-                    name_display = m.display_name.strip().replace("@", "")
-                    prime = prime_data.get(name_display)
-            
-                    if prime is None:
-                        name_fallback = m.name.strip().replace("@", "")
-                        prime = prime_data.get(name_fallback, 0)
-            
-                    rank, emoji = get_rank(prime)
-                    group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
-                    déjà_affichés.add(m.id)
+                if m.id in déjà_affichés:
+                    continue
+
+                pseudo = m.display_name.strip().replace("@", "")
+                prime = prime_data.get(pseudo)
+
+                if prime is None:
+                    fallback = m.name.strip().replace("@", "")
+                    prime = prime_data.get(fallback, 0)
+
+                rank, emoji = get_rank(prime)
+                group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
+                déjà_affichés.add(m.id)
 
         if group:
             sorted_group = sorted(group, key=lambda x: x[0], reverse=True)
-            embed.add_field(name=titre, value="\n".join([x[1] for x in sorted_group]), inline=False)
+            embed.add_field(name=titre, value="\n".join(x[1] for x in sorted_group), inline=False)
 
     embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
     return embed
+
 
 @bot.command()
 @commands.has_permissions(administrator=True)
