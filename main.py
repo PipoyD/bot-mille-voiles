@@ -410,12 +410,15 @@ def build_prime_embed(guild):
             members = [m for m in guild.members if discord.utils.get(m.roles, id=ROLES[role]) and not m.bot]
             for m in members:
                 if m.id not in déjà_affichés:
-                    name_display = m.display_name.strip()
-                    prime = prime_data.get(name_display)
-                    
-                    if prime is None:
-                        name_fallback = m.name.strip()
-                        prime = prime_data.get(name_fallback, 0)
+                name = m.display_name.strip()
+                name = name.replace("@", "").strip()
+                
+                prime = prime_data.get(name)
+                
+                if prime is None:
+                    fallback = m.name.strip().replace("@", "")
+                    prime = prime_data.get(fallback, 0)
+
                     rank, emoji = get_rank(prime)
                     group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
                     déjà_affichés.add(m.id)
