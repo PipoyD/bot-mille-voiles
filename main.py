@@ -264,7 +264,7 @@ def build_flotte_embed(guild):
     paris = pytz.timezone("Europe/Paris")
     now = datetime.now(paris).strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
     embed.set_footer(text=now)
-
+    
     return embed
 
 # ---------------------- Commande !recrutement ----------------------
