@@ -236,11 +236,26 @@ def build_flotte_embed(guild):
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["AZUR"])), inline=False)
 
-    lieutenants_sans = [m.mention for m in filter_unique(ROLES["LIEUTENANT"]) if m.id not in déjà_affichés]
-    embed.add_field(name="🎖️ Lieutenants sans flotte :", value="\n".join(lieutenants_sans) or "Aucun", inline=False)
+# Section sans flotte
+embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
 
-    membres_sans = [m.mention for m in filter_unique(ROLES["MEMBRE"]) if m.id not in déjà_affichés]
-    embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans) or "Aucun", inline=False)
+lieutenants_sans = [
+    m.mention for m in filter_unique(ROLES["LIEUTENANT"])
+    if m.id not in déjà_affichés
+]
+embed.add_field(name="🎖️ Lieutenants sans flotte :", value="\n".join(lieutenants_sans) or "Aucun", inline=False)
+grades_sup = {
+    ROLES["CAPITAINE"],
+    ROLES["VICE_CAPITAINE"],
+    ROLES["COMMANDANT"],
+    ROLES["VICE_COMMANDANT"],
+    ROLES["LIEUTENANT"]
+}
+membres_sans = [
+    m.mention for m in filter_unique(ROLES["MEMBRE"])
+    if m.id not in déjà_affichés and not any(role.id in grades_sup for role in m.roles)
+]
+embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans) or "Aucun", inline=False)
 
     return embed
 
