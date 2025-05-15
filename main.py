@@ -287,8 +287,28 @@ async def flottes(ctx):
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     bot.add_view(RecrutementView())
-    bot.add_view(VoteView())
-    bot.add_view(FlotteView())  # <- bouton actualisation persistant
+    bot.add_view(FlotteView())
+
+    # Réattacher les boutons de vote aux messages existants
+    for msg_id in vote_data.keys():
+        try:
+            msg_id_int = int(msg_id)
+            # Parcours tous les salons accessibles pour chercher le message
+            for guild in bot.guilds:
+                for channel in guild.text_channels:
+                    try:
+                        message = await channel.fetch_message(msg_id_int)
+                        view = VoteView()
+                        view.message = message
+                        bot.add_view(view, message_id=msg_id_int)
+                        print(f"🔁 Vue restaurée pour le message {msg_id_int} dans #{channel.name}")
+                        raise StopIteration  # Stoppe la boucle une fois trouvé
+                    except discord.NotFound:
+                        continue
+                    except discord.Forbidden:
+                        continue
+        except Exception as e:
+            print(f"❌ Erreur de récupération message {msg_id}: {e}")
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
