@@ -435,17 +435,22 @@ def upload_to_github():
     if not GITHUB_TOKEN:
         print("❌ Aucun token GitHub fourni.")
         return
-    if res.status_code not in [200, 201]:
-        print("❌ Détail de l'erreur GitHub :", res.json())
 
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
 
-    with open(PRIME_FILE, "rb") as f:
-        content = base64.b64encode(f.read()).decode()
+    try:
+        with open(PRIME_FILE, "rb") as f:
+            content = base64.b64encode(f.read()).decode()
+    except Exception as e:
+        print("❌ Erreur lecture fichier primes.json :", e)
+        return
 
-    # Récupérer le SHA du fichier s’il existe
-    response = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    sha = response.json().get("sha") if response.status_code == 200 else None
+    try:
+        response = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+        sha = response.json().get("sha") if response.status_code == 200 else None
+    except Exception as e:
+        print("❌ Erreur récupération SHA GitHub :", e)
+        sha = None
 
     payload = {
         "message": "Mise à jour automatique de primes.json",
@@ -455,11 +460,16 @@ def upload_to_github():
     if sha:
         payload["sha"] = sha
 
-    res = requests.put(url, headers={"Authorization": f"token {GITHUB_TOKEN}"}, json=payload)
-    if res.status_code in [200, 201]:
-        print("✅ primes.json mis à jour sur GitHub.")
-    else:
-        print("❌ Échec de l'envoi GitHub :", res.text)
+    try:
+        res = requests.put(url, headers={"Authorization": f"token {GITHUB_TOKEN}"}, json=payload)
+        print("📦 Réponse GitHub :", res.status_code, res.text)
+        if res.status_code in [200, 201]:
+            print("✅ primes.json mis à jour sur GitHub.")
+        else:
+            print("❌ Échec de l'envoi GitHub :", res.text)
+    except Exception as e:
+        print("❌ Erreur requête PUT GitHub :", e)
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def prime(ctx):
