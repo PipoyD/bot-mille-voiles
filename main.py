@@ -15,7 +15,7 @@ recrutement_status = {"active": True}
 
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
-VOTE_CHANNEL_ID = 1358037356749394111
+VOTE_CHANNEL_ID = 1371557531373277376
 
 def load_votes():
     try:
