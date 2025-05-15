@@ -103,6 +103,7 @@ async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     bot.add_view(RecrutementView())
     bot.add_view(FlotteView())
+    bot.add_view(PrimeView())
 
     try:
         channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
@@ -364,7 +365,10 @@ class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
             if ":" in ligne:
                 nom, valeur = ligne.split(":", 1)
                 nom = nom.strip()
-                valeur = int(valeur.replace(",", "").replace(" ", ""))
+                try:
+                    valeur = int(valeur.replace(",", "").replace(" ", ""))
+                except ValueError:
+                    valeur = 0
                 prime_data[nom] = valeur
         save_primes(prime_data)
         embed = build_prime_embed(self.guild)
@@ -406,7 +410,7 @@ def build_prime_embed(guild):
             members = [m for m in guild.members if discord.utils.get(m.roles, id=ROLES[role]) and not m.bot]
             for m in members:
                 if m.id not in déjà_affichés:
-                    name = m.display_name
+                    name = m.name  # ✅ Corrigé ici
                     prime = prime_data.get(name, 0)
                     rank, emoji = get_rank(prime)
                     group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
