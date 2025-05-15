@@ -289,23 +289,29 @@ async def on_ready():
     bot.add_view(RecrutementView())
     bot.add_view(FlotteView())
 
-    # Réattacher les boutons de vote uniquement dans le salon des votes
     try:
         channel = await bot.fetch_channel(1371557531373277376)
         for msg_id in vote_data.keys():
             try:
                 msg_id_int = int(msg_id)
                 message = await channel.fetch_message(msg_id_int)
-                view = VoteView()
-                view.message = message
+
+                class RestoredVoteView(VoteView):
+                    def __init__(self, message):
+                        super().__init__()
+                        self.message = message
+
+                view = RestoredVoteView(message)
                 bot.add_view(view, message_id=msg_id_int)
                 print(f"🔁 Vue restaurée pour le message {msg_id_int} dans #{channel.name}")
+
             except discord.NotFound:
                 print(f"❌ Message non trouvé : {msg_id}")
             except discord.Forbidden:
                 print(f"🚫 Accès interdit au message : {msg_id}")
     except Exception as e:
         print(f"❌ Erreur lors de la récupération du salon de vote : {e}")
+
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
