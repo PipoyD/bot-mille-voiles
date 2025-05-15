@@ -163,23 +163,22 @@ def build_recrutement_embed():
     )
     return embed
 
-# ---------------------- Commande !recrutement ----------------------
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def recrutement(ctx):
-    embed = build_recrutement_embed()
-    view = RecrutementView()
-    if recrutement_status["active"]:
-        await ctx.send(content="@everyone", embed=embed, view=view)
-    else:
-        await ctx.send(embed=embed, view=view)
+# ---------------------- Flotte View + Actualisation ----------------------
+class FlotteView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-# ---------------------- Commande !flottes ----------------------
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def flottes(ctx):
-    guild = ctx.guild
+    @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_flotte")
+    async def refresh(self, interaction: discord.Interaction, button: Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
+            return
 
+        embed = build_flotte_embed(interaction.guild)
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.response.send_message("✅ Liste actualisée.", ephemeral=True)
+
+def build_flotte_embed(guild):
     ROLES = {
         "CAPITAINE": 1317851007358734396,
         "VICE_CAPITAINE": 1358079100203569152,
@@ -191,75 +190,82 @@ async def flottes(ctx):
         "AZUR": 1371942559894736916,
     }
 
-    def filter_by(grade_id, flotte_id=None):
+    def filter_unique(grade_id, flotte_id=None):
         return [
-            member.mention
-            for member in guild.members
-            if discord.utils.get(member.roles, id=grade_id) and
-               (discord.utils.get(member.roles, id=flotte_id) if flotte_id else True)
+            member for member in guild.members
+            if discord.utils.get(member.roles, id=grade_id)
+            and (discord.utils.get(member.roles, id=flotte_id) if flotte_id else True)
         ]
+
+    membres_equipage = [
+        m for m in guild.members if discord.utils.get(m.roles, id=ROLES["MEMBRE"]) and not m.bot
+    ]
 
     embed = discord.Embed(
         title="⚓ • Équipage : Les Mille Voiles • ⚓",
-        description="**Effectif total :** {} membres".format(len([m for m in guild.members if not m.bot])),
+        description=f"**Effectif total :** {len(membres_equipage)} membres",
         color=0x3498db
     )
 
-    capitaine = filter_by(ROLES["CAPITAINE"])
-    vice_capitaine = filter_by(ROLES["VICE_CAPITAINE"])
+    déjà_affichés = set()
+
+    def filtrer(role_id, flotte_id=None):
+        result = []
+        for m in filter_unique(role_id, flotte_id):
+            if m.id not in déjà_affichés:
+                déjà_affichés.add(m.id)
+                result.append(m.mention)
+        return result or ["N/A"]
+
     embed.add_field(
         name="🧭 Capitainerie :",
-        value=f"👑 **Capitaine :** {capitaine[0] if capitaine else 'N/A'}\n"
-              f"🗡️ **Vice-Capitaine :** {vice_capitaine[0] if vice_capitaine else 'N/A'}",
+        value=f"👑 **Capitaine :** {filtrer(ROLES['CAPITAINE'])[0]}\n"
+              f"🗡️ **Vice-Capitaine :** {filtrer(ROLES['VICE_CAPITAINE'])[0]}",
         inline=False
     )
 
     embed.add_field(name="__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
-    embed.add_field(name="🛡️ Commandant :", value="\n".join(filter_by(ROLES["COMMANDANT"], ROLES["ECARLATE"])) or "N/A", inline=False)
-    embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filter_by(ROLES["VICE_COMMANDANT"], ROLES["ECARLATE"])) or "N/A", inline=False)
-    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filter_by(ROLES["LIEUTENANT"], ROLES["ECARLATE"])) or "N/A", inline=False)
-    embed.add_field(name="👥 Membres :", value="\n".join(filter_by(ROLES["MEMBRE"], ROLES["ECARLATE"])) or "N/A", inline=False)
+    embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["ECARLATE"])), inline=False)
+    embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["ECARLATE"])), inline=False)
+    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["ECARLATE"])), inline=False)
+    embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["ECARLATE"])), inline=False)
 
     embed.add_field(name="__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
-    embed.add_field(name="🛡️ Commandant :", value="\n".join(filter_by(ROLES["COMMANDANT"], ROLES["AZUR"])) or "N/A", inline=False)
-    embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filter_by(ROLES["VICE_COMMANDANT"], ROLES["AZUR"])) or "N/A", inline=False)
-    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filter_by(ROLES["LIEUTENANT"], ROLES["AZUR"])) or "N/A", inline=False)
-    embed.add_field(name="👥 Membres :", value="\n".join(filter_by(ROLES["MEMBRE"], ROLES["AZUR"])) or "N/A", inline=False)
+    embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["AZUR"])), inline=False)
+    embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["AZUR"])), inline=False)
+    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["AZUR"])), inline=False)
+    embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["AZUR"])), inline=False)
 
-    all_lieutenants = set(filter_by(ROLES["LIEUTENANT"]))
-    lieutenants_f1 = set(filter_by(ROLES["LIEUTENANT"], ROLES["ECARLATE"]))
-    lieutenants_f2 = set(filter_by(ROLES["LIEUTENANT"], ROLES["AZUR"]))
-    sans_flotte_lieutenants = list(all_lieutenants - lieutenants_f1 - lieutenants_f2)
+    lieutenants_sans = [m.mention for m in filter_unique(ROLES["LIEUTENANT"]) if m.id not in déjà_affichés]
+    embed.add_field(name="🎖️ Lieutenants sans flotte :", value="\n".join(lieutenants_sans) or "Aucun", inline=False)
 
-    embed.add_field(
-        name="🎖️ Lieutenants sans flotte :",
-        value="\n".join(sans_flotte_lieutenants) or "Aucun",
-        inline=False
-    )
+    membres_sans = [m.mention for m in filter_unique(ROLES["MEMBRE"]) if m.id not in déjà_affichés]
+    embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans) or "Aucun", inline=False)
 
-    all_membres = set(filter_by(ROLES["MEMBRE"]))
-    membres_f1 = set(filter_by(ROLES["MEMBRE"], ROLES["ECARLATE"]))
-    membres_f2 = set(filter_by(ROLES["MEMBRE"], ROLES["AZUR"]))
-    sans_flotte_membres = list(all_membres - membres_f1 - membres_f2)
+    return embed
 
-    embed.add_field(
-        name="👥 Membres sans flotte :",
-        value="\n".join(sans_flotte_membres) or "Aucun",
-        inline=False
-    )
-
-    await ctx.send(embed=embed)
-
+# ---------------------- Commande !recrutement ----------------------
 @bot.command()
-async def ping(ctx):
-    await ctx.send("pong")
-    
+@commands.has_permissions(administrator=True)
+async def recrutement(ctx):
+    embed = build_recrutement_embed()
+    view = RecrutementView()
+    await ctx.send(embed=embed, view=view)
+
+# ---------------------- Commande !flottes ----------------------
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def flottes(ctx):
+    embed = build_flotte_embed(ctx.guild)
+    await ctx.send(embed=embed, view=FlotteView())
+
 # ---------------------- Événement on_ready ----------------------
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     bot.add_view(RecrutementView())
     bot.add_view(VoteView())
+    bot.add_view(FlotteView())  # <- bouton actualisation persistant
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
