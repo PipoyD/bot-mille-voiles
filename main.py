@@ -1,6 +1,7 @@
 import os
 import discord
 import json
+import pytz
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 from datetime import datetime
@@ -260,7 +261,8 @@ def build_flotte_embed(guild):
     embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
     embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
     
-    now = datetime.now().strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
+    paris = pytz.timezone("Europe/Paris")
+    now = datetime.now(paris).strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
     embed.set_footer(text=now)
 
     return embed
