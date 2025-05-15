@@ -57,6 +57,12 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         vote_data[str(message.id)] = {}
         save_votes()
 
+# ---------------------- Vue de vote restaurée ----------------------
+class RestoredVoteView(VoteView):
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+        
 # ---------------------- Vue de vote ----------------------
 class VoteView(View):
     def __init__(self):
@@ -295,11 +301,6 @@ async def on_ready():
             try:
                 msg_id_int = int(msg_id)
                 message = await channel.fetch_message(msg_id_int)
-
-                class RestoredVoteView(VoteView):
-                    def __init__(self, message):
-                        super().__init__()
-                        self.message = message
 
                 view = RestoredVoteView(message)
                 bot.add_view(view, message_id=msg_id_int)
