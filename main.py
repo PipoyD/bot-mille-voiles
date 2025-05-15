@@ -294,7 +294,7 @@ async def flottes(ctx):
 # ---------------------- Coffres emplacements ----------------------
 
 ILE_COFFRES = {
-    "Logue Town: [
+    "Logue Town": [
         {"desc": "Derrière Fushia News", "img": "https://imgur.com/BaLuctc"},
         {"desc": "Rue à droite en face de la Mairie", "img": "https://imgur.com/Ls3L6H2"},
         {"desc": "Batiment collé à gauche du QG Marine", "img": "https://imgur.com/UHVFxLY"},
