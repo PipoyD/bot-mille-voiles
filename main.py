@@ -240,7 +240,7 @@ def build_flotte_embed(guild):
     
     # Lieutenants sans flotte
     lieutenants_sans = filtrer(ROLES["LIEUTENANT"])
-    embed.add_field(name="🎖️ Lieutenants sans flotte :", value="\n".join(lieutenants_sans), inline=False)
+    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(lieutenants_sans), inline=False)
     
     # Membres sans flotte : uniquement ceux qui ont exclusivement le rôle MEMBRE
     def membres_sans_flotte():
@@ -254,7 +254,10 @@ def build_flotte_embed(guild):
                 result.append(m.mention)
         return result or ["N/A"]
     
-    embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans_flotte()), inline=False)
+    embed.add_field(name="👥 Membres :", value="\n".join(membres_sans_flotte()), inline=False)
+    
+    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
+    embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
 
     return embed
 
