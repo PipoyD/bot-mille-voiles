@@ -239,7 +239,7 @@ def build_flotte_embed(guild):
         return result or ["N/A"]
 
     embed.add_field(
-        name="🧭 Capitainerie :",
+        name="__**🧭 Capitainerie :**__",
         value=f"👑 **Capitaine :** {filtrer(ROLES['CAPITAINE'])[0]}\n"
               f"🗡️ **Vice-Capitaine :** {filtrer(ROLES['VICE_CAPITAINE'])[0]}",
         inline=False
