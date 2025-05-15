@@ -370,8 +370,8 @@ class IleSelectView(View):
 
 @bot.command()
 async def coffre(ctx):
+    await ctx.message.delete()
     if not any(role.id == RECRUTEUR_ROLE_ID for role in ctx.author.roles):
-        await ctx.message.delete()
         await ctx.send("🚫 Tu n'as pas accès à cette commande.", delete_after=10)
         return
 
