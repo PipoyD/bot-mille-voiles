@@ -301,7 +301,7 @@ async def on_ready():
     bot.add_view(FlotteView())
 
     try:
-        channel = await bot.fetch_channel(1371557531373277376)
+        channel = await bot.fetch_channel(1358037356749394111)
         for msg_id in vote_data.keys():
             try:
                 msg_id_int = int(msg_id)
