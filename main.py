@@ -15,8 +15,8 @@ recrutement_status = {"active": True}
 
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
+VOTE_CHANNEL_ID = 1358037356749394111
 
-# ---------------------- Votes persistants ----------------------
 def load_votes():
     try:
         with open(VOTE_FILE, "r") as f:
@@ -30,7 +30,6 @@ def save_votes():
 
 vote_data = load_votes()
 
-# ---------------------- Modal de formulaire ----------------------
 class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     nom_rp = TextInput(label="Nom RP", placeholder="Ex: Akira le Flamme", required=True)
     age = TextInput(label="Âge", placeholder="Ex: 17 ans", required=True)
@@ -50,86 +49,99 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         embed.add_field(name="Aura", value=self.aura.value, inline=False)
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
-        view = VoteView()
-        await interaction.response.send_message("Merci pour ta candidature !", ephemeral=True)
-        message = await interaction.channel.send(content=f"<@&{RECRUTEUR_ROLE_ID}>", embed=embed, view=view)
-        view.message = message
+        message = await interaction.channel.send(content=f"<@&{RECRUTEUR_ROLE_ID}>", embed=embed)
+        view = VoteView(message.id)
+        await message.edit(view=view)
         vote_data[str(message.id)] = {}
         save_votes()
-
-# ---------------------- Vue de vote ----------------------
+        await interaction.response.send_message("✅ Candidature envoyée avec succès !", ephemeral=True)
 class VoteView(View):
-    def __init__(self):
+    def __init__(self, message_id: int):
         super().__init__(timeout=None)
-        self.message = None
+        self.message_id = message_id
+        self.add_item(Button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id=f"vote_pour_{message_id}"))
+        self.add_item(Button(label="❌ Contre", style=discord.ButtonStyle.danger, custom_id=f"vote_contre_{message_id}"))
 
-    async def update_embed(self):
-        votes = vote_data.get(str(self.message.id), {})
-        pour = sum(1 for v in votes.values() if v == "pour")
-        contre = sum(1 for v in votes.values() if v == "contre")
+    async def handle_vote(self, interaction: discord.Interaction, choix: str):
+        if not any(role.id == RECRUTEUR_ROLE_ID for role in interaction.user.roles):
+            await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
+            return
 
-        color = 0x00ff00 if pour > contre else 0xff0000 if contre > pour else 0x2f3136
-        embed = self.message.embeds[0]
-        embed.color = color
-        embed.set_footer(text=f"Votes : ✅ {pour} | ❌ {contre}")
-        await self.message.edit(embed=embed, view=self)
+        msg_id = str(self.message_id)
+        user_id = str(interaction.user.id)
+        votes = vote_data.setdefault(msg_id, {})
+        current_vote = votes.get(user_id)
 
-    async def handle_vote(self, interaction, choix):
+        if current_vote == choix:
+            del votes[user_id]
+        else:
+            votes[user_id] = choix
+
+        save_votes()
+
+        channel = interaction.channel
         try:
-            if not any(role.id == RECRUTEUR_ROLE_ID for role in interaction.user.roles):
-                await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
-                return
-    
-            user_id = str(interaction.user.id)
-            msg_id = str(self.message.id)
-            votes = vote_data.setdefault(msg_id, {})
-            current_vote = votes.get(user_id)
-    
-            if current_vote == choix:
-                del votes[user_id]
-            else:
-                votes[user_id] = choix
-    
-            save_votes()
-            await self.update_embed()
-            if not interaction.response.is_done():
-                await interaction.response.defer()
+            message = await channel.fetch_message(self.message_id)
+            embed = message.embeds[0]
+            pour = sum(1 for v in votes.values() if v == "pour")
+            contre = sum(1 for v in votes.values() if v == "contre")
+            color = 0x00ff00 if pour > contre else 0xff0000 if contre > pour else 0x2f3136
+            embed.color = color
+            embed.set_footer(text=f"Votes : ✅ {pour} | ❌ {contre}")
+            await message.edit(embed=embed, view=self)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Une erreur est survenue : {str(e)}", ephemeral=True)
-            print(f"Erreur dans le traitement du vote : {e}")
+            print(f"❌ Erreur lors de la mise à jour du message : {e}")
 
+        await interaction.response.defer()
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if interaction.type != discord.InteractionType.component:
+        return
 
-    @discord.ui.button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id="vote_pour")
-    async def vote_pour(self, interaction: discord.Interaction, button: Button):
-        await self.handle_vote(interaction, "pour")
+    custom_id = interaction.data["custom_id"]
+    if custom_id.startswith("vote_pour_") or custom_id.startswith("vote_contre_"):
+        try:
+            action, msg_id_str = custom_id.split("_")[1], custom_id.split("_")[2]
+            msg_id = int(msg_id_str)
+            view = VoteView(msg_id)
+            await view.handle_vote(interaction, "pour" if "pour" in custom_id else "contre")
+        except Exception as e:
+            print(f"❌ Erreur interaction vote : {e}")
+            await interaction.response.send_message("❌ Une erreur est survenue.", ephemeral=True)
 
-    @discord.ui.button(label="❌ Contre", style=discord.ButtonStyle.danger, custom_id="vote_contre")
-    async def vote_contre(self, interaction: discord.Interaction, button: Button):
-        await self.handle_vote(interaction, "contre")
+@bot.event
+async def on_ready():
+    print(f"✅ Connecté en tant que {bot.user}")
+    bot.add_view(RecrutementView())
 
-# ---------------------- Vue de vote restaurée ----------------------
-class RestoredVoteView(VoteView):
-    def __init__(self, message):
-        super().__init__()
-        self.message = message
-        
-# ---------------------- Vue principale ----------------------
+    # Restaurer les boutons pour les candidatures existantes
+    try:
+        channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
+        async for message in channel.history(limit=200):
+            if message.author.id != bot.user.id or not message.embeds:
+                continue
+            embed = message.embeds[0]
+            if embed.title != "📋 Nouvelle Candidature":
+                continue
+            view = VoteView(message.id)
+            await message.edit(view=view)
+            print(f"🔁 Boutons restaurés pour : {message.id}")
+    except Exception as e:
+        print(f"❌ Erreur restauration boutons : {e}")
 class RecrutementView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.update_buttons()
-
-    def update_buttons(self):
-        self.clear_items()
         self.add_item(FormulaireButton())
         self.add_item(AdminToggleButton())
 
 class FormulaireButton(Button):
     def __init__(self):
-        super().__init__(label="📋 Remplir le formulaire",
-                         style=discord.ButtonStyle.primary,
-                         custom_id="formulaire_button",
-                         disabled=not recrutement_status["active"])
+        super().__init__(
+            label="📋 Remplir le formulaire",
+            style=discord.ButtonStyle.primary,
+            custom_id="formulaire_button",
+            disabled=not recrutement_status["active"]
+        )
 
     async def callback(self, interaction: discord.Interaction):
         if not recrutement_status["active"]:
@@ -139,9 +151,11 @@ class FormulaireButton(Button):
 
 class AdminToggleButton(Button):
     def __init__(self):
-        super().__init__(label="🛠️ Changer le statut",
-                         style=discord.ButtonStyle.secondary,
-                         custom_id="admin_toggle")
+        super().__init__(
+            label="🛠️ Changer le statut",
+            style=discord.ButtonStyle.secondary,
+            custom_id="admin_toggle"
+        )
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
@@ -157,7 +171,6 @@ class AdminToggleButton(Button):
             ephemeral=True
         )
 
-# ---------------------- Embed de recrutement ----------------------
 def build_recrutement_embed():
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
@@ -175,110 +188,6 @@ def build_recrutement_embed():
         color=couleur
     )
     return embed
-
-# ---------------------- Flotte View + Actualisation ----------------------
-class FlotteView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_flotte")
-    async def refresh(self, interaction: discord.Interaction, button: Button):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
-            return
-
-        embed = build_flotte_embed(interaction.guild)
-        await interaction.message.edit(embed=embed, view=self)
-        await interaction.response.send_message("✅ Liste actualisée.", ephemeral=True)
-
-def build_flotte_embed(guild):
-    ROLES = {
-        "CAPITAINE": 1317851007358734396,
-        "VICE_CAPITAINE": 1358079100203569152,
-        "COMMANDANT": 1358031308542181382,
-        "VICE_COMMANDANT": 1358032259596288093,
-        "LIEUTENANT": 1358030829225381908,
-        "MEMBRE": 1317850709948891177,
-        "ECARLATE": 1371942480316203018,
-        "AZUR": 1371942559894736916,
-    }
-
-    def filter_unique(grade_id, flotte_id=None):
-        return [
-            member for member in guild.members
-            if discord.utils.get(member.roles, id=grade_id)
-            and (discord.utils.get(member.roles, id=flotte_id) if flotte_id else True)
-        ]
-
-    membres_equipage = [
-        m for m in guild.members if discord.utils.get(m.roles, id=ROLES["MEMBRE"]) and not m.bot
-    ]
-
-    embed = discord.Embed(
-        title="⚓ • Équipage : Les Mille Voiles • ⚓",
-        description=f"**Effectif total :** {len(membres_equipage)} membres",
-        color=0xFFA500
-    )
-
-    déjà_affichés = set()
-
-    def filtrer(role_id, flotte_id=None):
-        result = []
-        for m in filter_unique(role_id, flotte_id):
-            if m.id not in déjà_affichés:
-                déjà_affichés.add(m.id)
-                result.append(m.mention)
-        return result or ["N/A"]
-
-    embed.add_field(
-        name="🧭 Capitainerie :",
-        value=f"👑 **Capitaine :** {filtrer(ROLES['CAPITAINE'])[0]}\n"
-              f"🗡️ **Vice-Capitaine :** {filtrer(ROLES['VICE_CAPITAINE'])[0]}",
-        inline=False
-    )
-
-    embed.add_field(name="__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
-    embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["ECARLATE"])), inline=False)
-    embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["ECARLATE"])), inline=False)
-    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["ECARLATE"])), inline=False)
-    embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["ECARLATE"])), inline=False)
-
-    embed.add_field(name="__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
-    embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["AZUR"])), inline=False)
-    embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["AZUR"])), inline=False)
-    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["AZUR"])), inline=False)
-    embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["AZUR"])), inline=False)
-
-    embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
-    lieutenants_sans = filtrer(ROLES["LIEUTENANT"])
-    embed.add_field(name="🎖️ Lieutenants :", value="\n".join(lieutenants_sans), inline=False)
-    
-    def membres_sans_flotte():
-        result = []
-        for m in guild.members:
-            if m.id in déjà_affichés:
-                continue
-            roles_ids = [r.id for r in m.roles]
-            if ROLES["MEMBRE"] in roles_ids and all(r not in ROLES.values() or r == ROLES["MEMBRE"] for r in roles_ids):
-                déjà_affichés.add(m.id)
-                result.append(m.mention)
-        return result or ["N/A"]
-    
-    embed.add_field(name="👥 Membres :", value="\n".join(membres_sans_flotte()), inline=False)
-    
-    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
-    embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
-
-    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
-    embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
-    
-    paris = pytz.timezone("Europe/Paris")
-    now = datetime.now(paris).strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
-    embed.set_footer(text=now)
-    
-    return embed
-
-# ---------------------- Commande !recrutement ----------------------
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
@@ -286,46 +195,13 @@ async def recrutement(ctx):
     view = RecrutementView()
     await ctx.send(embed=embed, view=view)
 
-# ---------------------- Commande !flottes ----------------------
+# ---------------------- Commande de test (optionnelle) ----------------------
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def flottes(ctx):
-    embed = build_flotte_embed(ctx.guild)
-    await ctx.send(embed=embed, view=FlotteView())
-
-# ---------------------- Événement on_ready ----------------------
-@bot.event
-async def on_ready():
-    print(f"✅ Connecté en tant que {bot.user}")
-    bot.add_view(RecrutementView())
-    bot.add_view(FlotteView())
-
-    try:
-        channel = await bot.fetch_channel(1358037356749394111)
-
-        async for message in channel.history(limit=200):  # Scanne jusqu’à 200 messages
-            if message.author.id != bot.user.id:
-                continue
-
-            if not message.embeds:
-                continue
-
-            embed = message.embeds[0]
-            if embed.title != "📋 Nouvelle Candidature":
-                continue
-
-            # Associe le message au vote
-            class VoteViewRestore(VoteView):
-                def __init__(self, msg):
-                    super().__init__(timeout=None)
-                    self.message = msg
-
-            view = VoteViewRestore(message)
-            await message.edit(view=view)
-            print(f"🔁 Boutons restaurés pour : {message.id}")
-
-    except Exception as e:
-        print(f"❌ Erreur restauration des boutons : {e}")
+async def resetvotes(ctx):
+    vote_data.clear()
+    save_votes()
+    await ctx.send("🔄 Tous les votes ont été réinitialisés.")
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
