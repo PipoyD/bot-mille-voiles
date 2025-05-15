@@ -239,22 +239,22 @@ def build_flotte_embed(guild):
     embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
     
     # Lieutenants sans flotte
-    lieutenants_sans = [
-        m.mention for m in filter_unique(ROLES["LIEUTENANT"])
-        if m.id not in déjà_affichés
-    ]
+    lieutenants_sans = filtrer(ROLES["LIEUTENANT"])
     embed.add_field(name="🎖️ Lieutenants sans flotte :", value="\n".join(lieutenants_sans), inline=False)
     
-    # Membres sans flotte (qui n'ont QUE le rôle MEMBRE)
-    membres_sans = [
-        m.mention for m in guild.members
-        if discord.utils.get(m.roles, id=ROLES["MEMBRE"])
-        and len([r for r in m.roles if r.id in ROLES.values()]) == 1
-        and m.id not in déjà_affichés
-    ]
+    # Membres sans flotte : uniquement ceux qui ont exclusivement le rôle MEMBRE
+    def membres_sans_flotte():
+        result = []
+        for m in guild.members:
+            if m.id in déjà_affichés:
+                continue
+            roles_ids = [r.id for r in m.roles]
+            if ROLES["MEMBRE"] in roles_ids and all(r not in ROLES.values() or r == ROLES["MEMBRE"] for r in roles_ids):
+                déjà_affichés.add(m.id)
+                result.append(m.mention)
+        return result or ["N/A"]
     
-    embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans), inline=False)
-
+    embed.add_field(name="👥 Membres sans flotte :", value="\n".join(membres_sans_flotte()), inline=False)
 
     return embed
 
