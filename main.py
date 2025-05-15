@@ -2,6 +2,7 @@ import os
 import discord
 import json
 import pytz
+import subprocess
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 from datetime import datetime
@@ -302,6 +303,7 @@ def load_primes():
 def save_primes(data):
     with open(PRIME_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+    sauvegarder_primes_git()
 
 # Formatage des primes
 def format_prime(prime):
@@ -423,7 +425,15 @@ def build_prime_embed(guild):
     embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
     return embed
 
-# Commande pour afficher les primes
+def sauvegarder_primes_git():
+    try:
+        subprocess.run(["git", "add", PRIME_FILE], check=True)
+        subprocess.run(["git", "commit", "-m", "Mise à jour automatique des primes"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print("✅ primes.json sauvegardé sur GitHub.")
+    except subprocess.CalledProcessError as e:
+        print("❌ Échec de la sauvegarde Git :", e)
+        
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def prime(ctx):
