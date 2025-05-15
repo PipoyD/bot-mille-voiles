@@ -2,9 +2,6 @@ import os
 import discord
 import json
 import pytz
-import subprocess
-import base64
-import requests
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 from datetime import datetime
@@ -16,14 +13,9 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 recrutement_status = {"active": True}
 
-PRIME_FILE = "primes.json"
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
 VOTE_CHANNEL_ID = 1371557531373277376
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = "PipoyD/bot-mille-voiles"  # change si ton repo a un autre nom
-GITHUB_FILE_PATH = "primes.json"
-GITHUB_BRANCH = "main"
 
 def load_votes():
     try:
@@ -111,7 +103,6 @@ async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     bot.add_view(RecrutementView())
     bot.add_view(FlotteView())
-    bot.add_view(PrimeView())
 
     try:
         channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
@@ -254,13 +245,13 @@ def build_flotte_embed(guild):
         inline=False
     )
 
-    embed.add_field(name="<:1reflotte:1372158546531324004>__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
+    embed.add_field(name="__**1ère Flotte : La Voile Écarlate**__", value="", inline=False)
     embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["ECARLATE"])), inline=False)
     embed.add_field(name="👥 Membres :", value="\n".join(filtrer(ROLES["MEMBRE"], ROLES["ECARLATE"])), inline=False)
 
-    embed.add_field(name="<:2meflotte:1372158586951696455>__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
+    embed.add_field(name="__**2ème Flotte : La Voile d'Azur**__", value="", inline=False)
     embed.add_field(name="🛡️ Commandant :", value="\n".join(filtrer(ROLES["COMMANDANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="🗡️ Vice-Commandant :", value="\n".join(filtrer(ROLES["VICE_COMMANDANT"], ROLES["AZUR"])), inline=False)
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(filtrer(ROLES["LIEUTENANT"], ROLES["AZUR"])), inline=False)
@@ -297,215 +288,6 @@ def build_flotte_embed(guild):
 async def flottes(ctx):
     embed = build_flotte_embed(ctx.guild)
     await ctx.send(embed=embed, view=FlotteView())
-
-# Chargement des primes
-def load_primes():
-    try:
-        with open(PRIME_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-def save_primes(data):
-    with open(PRIME_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    upload_to_github()
-
-# Formatage des primes
-def format_prime(prime):
-    return f"{prime:,}".replace(",", " ") + " Berrys"
-
-# Détermination du rang
-RANKS = [
-    (3_200_000_000, "Empereur Pirate", "👑"),
-    (1_150_000_000, "SuperNova", "🚀"),
-    (300_000_000, "Rang Z", "💎"),
-    (200_000_000, "Rang S+", "🔥"),
-    (150_000_000, "Rang S", "🔴"),
-    (60_000_000, "Rang A+", "🟠"),
-    (30_000_000, "Rang A", "🟡"),
-    (15_000_000, "Rang B", "🟢"),
-    (5_000_000, "Rang C", "🔵"),
-    (1_000_000, "Rang D", "🟣"),
-    (500_000, "Rang E", "⚪"),
-    (0, "Rookie", "💤")
-]
-
-def get_rank(prime):
-    for value, label, emoji in RANKS:
-        if prime >= value:
-            return label, emoji
-    return "Inconnu", "❓"
-
-# Vue pour les primes
-class PrimeView(View):
-    def __init__(self, guild=None):
-        super().__init__(timeout=None)
-        self.guild = guild
-
-    @discord.ui.button(label="📝 Mettre à jour les primes", style=discord.ButtonStyle.primary, custom_id="edit_primes")
-    async def edit(self, interaction: discord.Interaction, button: Button):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
-            return
-        await interaction.response.send_modal(UpdatePrimesModal(interaction.guild))
-
-# Modal pour la mise à jour des primes
-class UpdatePrimesModal(Modal, title="Mise à jour des Primes"):
-    input = TextInput(label="Copiez-collez ici les nouvelles primes", style=discord.TextStyle.paragraph, placeholder="Ex: Mounir San: 45,357,752", required=True)
-
-    def __init__(self, guild):
-        super().__init__()
-        self.guild = guild
-
-async def on_submit(self, interaction: discord.Interaction):
-    guild = self.guild
-    new_data = self.input.value
-    prime_data = load_primes()
-
-    ROLES = {
-        "CAPITAINE": 1317851007358734396,
-        "VICE_CAPITAINE": 1358079100203569152,
-        "COMMANDANT": 1358031308542181382,
-        "VICE_COMMANDANT": 1358032259596288093,
-        "LIEUTENANT": 1358030829225381908,
-        "MEMBRE": 1317850709948891177,
-    }
-
-    membres_valides = [
-        m for m in guild.members
-        if any(discord.utils.get(m.roles, id=rid) for rid in ROLES.values()) and not m.bot
-    ]
-    noms_valides = {m.display_name.strip().replace("@", ""): m for m in membres_valides}
-
-    lignes = new_data.split("\n")
-    for ligne in lignes:
-        if "–" in ligne:
-            nom, valeur = ligne.split("–", 1)
-            nom = nom.strip()
-            valeur = valeur.strip().replace("B", "").replace(",", "").replace(" ", "")
-            if nom not in noms_valides:
-                continue
-            try:
-                prime_data[nom] = int(valeur)
-            except ValueError:
-                continue
-
-    # Ajouter tous les membres valides s’ils ne sont pas encore dans le JSON
-    for nom in noms_valides:
-        if nom not in prime_data:
-            prime_data[nom] = 0
-
-    save_primes(prime_data)
-    embed = build_prime_embed(guild)
-    await interaction.message.edit(embed=embed, view=PrimeView(guild))
-    await interaction.response.send_message("✅ Primes mises à jour avec succès !", ephemeral=True)
-
-
-# Construction de l'embed des primes
-def build_prime_embed(guild):
-    prime_data = load_primes()
-    roles_by_category = {
-        "**👑 Capitaine**": ["CAPITAINE"],
-        "**🗡️ Vice-Capitaine**": ["VICE_CAPITAINE"],
-        "**🛡️ Commandants**": ["COMMANDANT"],
-        "**🗡️ Vice-Commandants**": ["VICE_COMMANDANT"],
-        "**🎖️ Lieutenants**": ["LIEUTENANT"],
-        "**👥 Membres**": ["MEMBRE"]
-    }
-    ROLES = {
-        "CAPITAINE": 1317851007358734396,
-        "VICE_CAPITAINE": 1358079100203569152,
-        "COMMANDANT": 1358031308542181382,
-        "VICE_COMMANDANT": 1358032259596288093,
-        "LIEUTENANT": 1358030829225381908,
-        "MEMBRE": 1317850709948891177,
-        "ECARLATE": 1371942480316203018,
-        "AZUR": 1371942559894736916,
-    }
-    FLOTTE_EMOJIS = {
-        "ECARLATE": "<:1reflotte:1372158546531324004>",
-        "AZUR": "<:2meflotte:1372158586951696455>"
-    }
-
-    def flotte_emoji(member):
-        for key, role_id in ROLES.items():
-            if key in FLOTTE_EMOJIS and discord.utils.get(member.roles, id=role_id):
-                return FLOTTE_EMOJIS[key]
-        return ""
-
-    embed = discord.Embed(title="📜 Primes & Rangs", color=0x00ffcc)
-    déjà_affichés = set()
-
-    for titre, types in roles_by_category.items():
-        group = []
-        for role in types:
-            members = [m for m in guild.members if discord.utils.get(m.roles, id=ROLES[role]) and not m.bot]
-            for m in members:
-                if m.id not in déjà_affichés:
-                    name_display = m.display_name.strip().replace("@", "")
-                    prime = prime_data.get(name_display)
-                    if prime is None:
-                        name_fallback = m.name.strip().replace("@", "")
-                        prime = prime_data.get(name_fallback, 0)
-                    rank, emoji = get_rank(prime)
-                    group.append((prime, f"{flotte_emoji(m)} {m.mention} — 💰 {format_prime(prime)} — {emoji} {rank}"))
-                    déjà_affichés.add(m.id)
-        if group:
-            sorted_group = sorted(group, key=lambda x: x[0], reverse=True)
-            embed.add_field(name=titre, value="\n".join([x[1] for x in sorted_group]), inline=False)
-
-    embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
-
-    embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
-    return embed
-
-def upload_to_github():
-    if not GITHUB_TOKEN:
-        print("❌ Aucun token GitHub fourni.")
-        return
-
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-
-    try:
-        with open(PRIME_FILE, "rb") as f:
-            content = base64.b64encode(f.read()).decode()
-    except Exception as e:
-        print("❌ Erreur lecture fichier primes.json :", e)
-        return
-
-    try:
-        response = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-        sha = response.json().get("sha") if response.status_code == 200 else None
-    except Exception as e:
-        print("❌ Erreur récupération SHA GitHub :", e)
-        sha = None
-
-    payload = {
-        "message": "Mise à jour automatique de primes.json",
-        "content": content,
-        "branch": GITHUB_BRANCH,
-    }
-    if sha:
-        payload["sha"] = sha
-
-    try:
-        res = requests.put(url, headers={"Authorization": f"token {GITHUB_TOKEN}"}, json=payload)
-        print("📦 Réponse GitHub :", res.status_code, res.text)
-        if res.status_code in [200, 201]:
-            print("✅ primes.json mis à jour sur GitHub.")
-        else:
-            print("❌ Échec de l'envoi GitHub :", res.text)
-    except Exception as e:
-        print("❌ Erreur requête PUT GitHub :", e)
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def prime(ctx):
-    embed = build_prime_embed(ctx.guild)
-    view = PrimeView(ctx.guild)
-    await ctx.send(embed=embed, view=view)
-
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
