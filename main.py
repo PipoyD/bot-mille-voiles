@@ -3,6 +3,8 @@ import discord
 import json
 import pytz
 import subprocess
+import base64
+import requests
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 from datetime import datetime
@@ -18,6 +20,10 @@ PRIME_FILE = "primes.json"
 VOTE_FILE = "votes.json"
 RECRUTEUR_ROLE_ID = 1317850709948891177
 VOTE_CHANNEL_ID = 1371557531373277376
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = "PipoyD/bot-mille-voiles"  # change si ton repo a un autre nom
+GITHUB_FILE_PATH = "primes.json"
+GITHUB_BRANCH = "main"
 
 def load_votes():
     try:
@@ -303,7 +309,7 @@ def load_primes():
 def save_primes(data):
     with open(PRIME_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    sauvegarder_primes_git()
+    upload_to_github()
 
 # Formatage des primes
 def format_prime(prime):
@@ -425,15 +431,35 @@ def build_prime_embed(guild):
     embed.set_footer(text=datetime.now(pytz.timezone("Europe/Paris")).strftime("Mis à jour le %d/%m/%Y à %H:%M"))
     return embed
 
-def sauvegarder_primes_git():
-    try:
-        subprocess.run(["git", "add", PRIME_FILE], check=True)
-        subprocess.run(["git", "commit", "-m", "Mise à jour automatique des primes"], check=True)
-        subprocess.run(["git", "push"], check=True)
-        print("✅ primes.json sauvegardé sur GitHub.")
-    except subprocess.CalledProcessError as e:
-        print("❌ Échec de la sauvegarde Git :", e)
-        
+def upload_to_github():
+    if not GITHUB_TOKEN:
+        print("❌ Aucun token GitHub fourni.")
+        return
+    if res.status_code not in [200, 201]:
+        print("❌ Détail de l'erreur GitHub :", res.json())
+
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+
+    with open(PRIME_FILE, "rb") as f:
+        content = base64.b64encode(f.read()).decode()
+
+    # Récupérer le SHA du fichier s’il existe
+    response = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    sha = response.json().get("sha") if response.status_code == 200 else None
+
+    payload = {
+        "message": "Mise à jour automatique de primes.json",
+        "content": content,
+        "branch": GITHUB_BRANCH,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    res = requests.put(url, headers={"Authorization": f"token {GITHUB_TOKEN}"}, json=payload)
+    if res.status_code in [200, 201]:
+        print("✅ primes.json mis à jour sur GitHub.")
+    else:
+        print("❌ Échec de l'envoi GitHub :", res.text)
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def prime(ctx):
