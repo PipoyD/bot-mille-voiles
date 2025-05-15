@@ -50,11 +50,11 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
         message = await interaction.channel.send(content=f"<@&{RECRUTEUR_ROLE_ID}>", embed=embed)
-        view = VoteView()
-        await message.edit(view=view)
         vote_data[str(message.id)] = {}
         save_votes()
+        await message.edit(view=VoteView())
         await interaction.response.send_message("✅ Candidature envoyée avec succès !", ephemeral=True)
+
 class VoteView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -88,36 +88,22 @@ class VoteView(View):
             embed = interaction.message.embeds[0]
             pour = sum(1 for v in votes.values() if v == "pour")
             contre = sum(1 for v in votes.values() if v == "contre")
-            color = 0x00ff00 if pour > contre else 0xff0000 if contre > pour else 0x2f3136
-            embed.color = color
+            embed.color = 0x00ff00 if pour > contre else 0xff0000 if contre > pour else 0x2f3136
             embed.set_footer(text=f"Votes : ✅ {pour} | ❌ {contre}")
             await interaction.message.edit(embed=embed, view=self)
         except Exception as e:
             print(f"❌ Erreur lors de la mise à jour du message : {e}")
+            await interaction.response.send_message("❌ Une erreur est survenue lors de la mise à jour.", ephemeral=True)
+            return
 
         await interaction.response.defer()
-@bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type != discord.InteractionType.component:
-        return
-
-    custom_id = interaction.data["custom_id"]
-    if custom_id.startswith("vote_pour_") or custom_id.startswith("vote_contre_"):
-        try:
-            action, msg_id_str = custom_id.split("_")[1], custom_id.split("_")[2]
-            msg_id = int(msg_id_str)
-            view = VoteView(msg_id)
-            await view.handle_vote(interaction, "pour" if "pour" in custom_id else "contre")
-        except Exception as e:
-            print(f"❌ Erreur interaction vote : {e}")
-            await interaction.response.send_message("❌ Une erreur est survenue.", ephemeral=True)
 
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
     bot.add_view(RecrutementView())
     bot.add_view(FlotteView())
-    
+
     try:
         channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
         async for message in channel.history(limit=200):
@@ -126,11 +112,11 @@ async def on_ready():
             embed = message.embeds[0]
             if embed.title != "📋 Nouvelle Candidature":
                 continue
-            view = VoteView(message.id)
-            await message.edit(view=view)
+            await message.edit(view=VoteView())
             print(f"🔁 Boutons restaurés pour : {message.id}")
     except Exception as e:
         print(f"❌ Erreur restauration boutons : {e}")
+
 class RecrutementView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -191,6 +177,7 @@ def build_recrutement_embed():
         color=couleur
     )
     return embed
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def recrutement(ctx):
@@ -198,7 +185,6 @@ async def recrutement(ctx):
     view = RecrutementView()
     await ctx.send(embed=embed, view=view)
 
-# ---------------------- Flotte View + Actualisation ----------------------
 class FlotteView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -274,7 +260,7 @@ def build_flotte_embed(guild):
     embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
     lieutenants_sans = filtrer(ROLES["LIEUTENANT"])
     embed.add_field(name="🎖️ Lieutenants :", value="\n".join(lieutenants_sans), inline=False)
-    
+
     def membres_sans_flotte():
         result = []
         for m in guild.members:
@@ -285,16 +271,16 @@ def build_flotte_embed(guild):
                 déjà_affichés.add(m.id)
                 result.append(m.mention)
         return result or ["N/A"]
-    
+
     embed.add_field(name="👥 Membres :", value="\n".join(membres_sans_flotte()), inline=False)
-    
+
     embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
     embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
-    
+
     paris = pytz.timezone("Europe/Paris")
     now = datetime.now(paris).strftime("Dernière mise à jour : %d/%m/%Y à %H:%M")
     embed.set_footer(text=now)
-    
+
     return embed
 
 @bot.command()
