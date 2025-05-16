@@ -11,7 +11,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 recrutement_status = {"active": True}
 
 VOTE_FILE = "votes.json"
