@@ -1,3 +1,5 @@
+# cogs/recrutement.py
+
 import os
 import json
 import pytz
@@ -13,10 +15,11 @@ RECRUTEUR_ROLE_ID = 1317850709948891177
 VOTE_CHANNEL_ID  = 1371557531373277376
 
 def load_votes():
-    if os.path.exists(VOTE_FILE):
+    try:
         with open(VOTE_FILE, "r") as f:
-            return json.load(f)
-    return {}
+            return json.load(f) or {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 def save_votes(data):
     with open(VOTE_FILE, "w") as f:
@@ -24,6 +27,7 @@ def save_votes(data):
 
 vote_data = load_votes()
 recrutement_status = {"active": True}
+
 
 class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     nom_rp = TextInput(label="Nom RP", placeholder="Ex: Akira le Flamme")
@@ -44,7 +48,10 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
             embed.add_field(name=name, value=field.value, inline=False)
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
-        msg = await interaction.channel.send(content=f"<@&{RECRUTEUR_ROLE_ID}>", embed=embed)
+        msg = await interaction.channel.send(
+            content=f"<@&{RECRUTEUR_ROLE_ID}>",
+            embed=embed
+        )
         vote_data[str(msg.id)] = {}
         save_votes(vote_data)
         await msg.edit(view=VoteView())
@@ -56,16 +63,18 @@ class VoteView(View):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="✅ Pour", style=discord.ButtonStyle.success, custom_id="vote_pour")
-    async def pour(self, interaction, button):
+    async def pour(self, interaction: discord.Interaction, button: Button):
         await self._vote(interaction, "pour")
 
     @discord.ui.button(label="❌ Contre", style=discord.ButtonStyle.danger, custom_id="vote_contre")
-    async def contre(self, interaction, button):
+    async def contre(self, interaction: discord.Interaction, button: Button):
         await self._vote(interaction, "contre")
 
-    async def _vote(self, interaction, choix):
+    async def _vote(self, interaction: discord.Interaction, choix: str):
         if RECRUTEUR_ROLE_ID not in [r.id for r in interaction.user.roles]:
-            return await interaction.response.send_message("🚫 Seuls les recruteurs peuvent voter.", ephemeral=True)
+            return await interaction.response.send_message(
+                "🚫 Seuls les recruteurs peuvent voter.", ephemeral=True
+            )
 
         mid = str(interaction.message.id)
         uid = str(interaction.user.id)
@@ -96,9 +105,11 @@ class FormulaireButton(Button):
             custom_id="formulaire_button"
         )
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction):
         if not recrutement_status["active"]:
-            return await interaction.response.send_message("🚫 Le recrutement est fermé.", ephemeral=True)
+            return await interaction.response.send_message(
+                "🚫 Le recrutement est fermé.", ephemeral=True
+            )
         await interaction.response.send_modal(RecrutementModal())
 
 
@@ -110,11 +121,14 @@ class AdminToggleButton(Button):
             custom_id="admin_toggle"
         )
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("🚫 Administrateurs uniquement.", ephemeral=True)
+            return await interaction.response.send_message(
+                "🚫 Administrateurs uniquement.", ephemeral=True
+            )
 
         recrutement_status["active"] = not recrutement_status["active"]
+        view = RecrutementView()
         statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
         couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
         embed = Embed(
@@ -122,31 +136,35 @@ class AdminToggleButton(Button):
             description=f"> **Statut :** {statut}",
             color=couleur
         )
-        view = View()
-        view.add_item(FormulaireButton())
-        view.add_item(AdminToggleButton())
         await interaction.message.edit(embed=embed, view=view)
         await interaction.response.send_message(f"🔄 Recrutement {statut}", ephemeral=True)
 
 
+class RecrutementView(View):
+    """Vue persistante pour le formulaire et le toggle."""
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(FormulaireButton())
+        self.add_item(AdminToggleButton())
+
+
 class Recrutement(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        bot.add_view(FormulaireButton())
-        bot.add_view(AdminToggleButton())
+        bot.add_view(RecrutementView())
         bot.add_view(VoteView())
 
     @commands.Cog.listener()
     async def on_ready(self):
-        chan = await self.bot.fetch_channel(VOTE_CHANNEL_ID)
-        async for msg in chan.history(limit=200):
+        channel = await self.bot.fetch_channel(VOTE_CHANNEL_ID)
+        async for msg in channel.history(limit=200):
             if msg.author.id == self.bot.user.id and msg.embeds:
                 if msg.embeds[0].title == "📋 Nouvelle Candidature":
                     await msg.edit(view=VoteView())
 
     @commands.command(name="recrutement")
     @commands.has_permissions(administrator=True)
-    async def recrutement(self, ctx):
+    async def recrutement(self, ctx: commands.Context):
         await ctx.message.delete()
         statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
         couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
@@ -158,12 +176,8 @@ class Recrutement(commands.Cog):
             ),
             color=couleur
         )
-        view = View()
-        view.add_item(FormulaireButton())
-        view.add_item(AdminToggleButton())
-        await ctx.send(embed=embed, view=view)
+        await ctx.send(embed=embed, view=RecrutementView())
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Recrutement(bot))
-
