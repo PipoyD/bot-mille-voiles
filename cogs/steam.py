@@ -25,5 +25,5 @@ class Steam(commands.Cog):
         )
         await ctx.send(content="@everyone", embed=embed, view=SteamButtonView())
 
-def setup(bot):
-    bot.add_cog(Steam(bot))
+async def setup(bot):
+    await bot.add_cog(Steam(bot))
