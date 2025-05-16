@@ -1,3 +1,4 @@
+# main.py
 import os
 import discord
 from discord.ext import commands
@@ -12,14 +13,21 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# Charge tous les cogs automatiquement
-for filename in os.listdir("./cogs"):
-    if filename.endswith(".py"):
-        bot.load_extension(f"cogs.{filename[:-3]}")
-
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
+    print("⚙️  Commandes disponibles :", ", ".join(sorted([c.name for c in bot.commands])))
+
+# --- Chargement automatique des Cogs ---
+cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
+for filename in os.listdir(cogs_dir):
+    if filename.endswith(".py") and filename != "__init__.py":
+        cog_name = filename[:-3]
+        try:
+            bot.load_extension(f"cogs.{cog_name}")
+            print(f"✔️  Cog chargé : {cog_name}")
+        except Exception as e:
+            print(f"❌ Erreur chargement du cog {cog_name} : {e}")
 
 if __name__ == "__main__":
     bot.run(TOKEN)
