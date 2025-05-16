@@ -113,5 +113,6 @@ class Coffre(commands.Cog):
         view = IleSelectView(ctx.author.id)
         await ctx.send(embed=embed, view=view, delete_after=600)
 
-def setup(bot: commands.Bot):
-    bot.add_cog(Coffre(bot))
+async def setup(bot):
+    await bot.add_cog(Coffre(bot))
+
