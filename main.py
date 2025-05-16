@@ -456,6 +456,11 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
+        name="🎮 !serveur", 
+        value="Annonce l’ouverture du serveur One Piece **Réservé aux administrateurs.**.", 
+        inline=False
+    )
+    embed.add_field(
         name="📦 !coffre",
         value="Permet de consulter les emplacements de coffres. **Réservé à l'équipage.**",
         inline=False
@@ -480,6 +485,7 @@ class SteamButtonView(View):
         ))
 
 @bot.command()
+@commands.has_permissions(administrator=True)
 async def serveur(ctx):
     await ctx.message.delete()
     embed = discord.Embed(
