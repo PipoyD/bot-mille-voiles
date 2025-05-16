@@ -474,7 +474,7 @@ async def help_command(ctx):
 class SteamButtonView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(Button(label="🎮 Se connecter au serveur", url="https://steamconnect.net/ip/208.115.196.11:27015"))
+        self.add_item(Button(label="🎮 Se connecter au serveur", url="https://pipoyd.github.io/bot-mille-voiles/steam_page.html"))
 
 @bot.command()
 async def steam(ctx):
