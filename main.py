@@ -483,7 +483,7 @@ class SteamButtonView(View):
 async def serveur(ctx):
     await ctx.message.delete()
     embed = discord.Embed(
-        title="🟥 Ouverture du Serveur One Piece",
+        title="<:equipage:1358154724423106781> Ouverture du Serveur One Piece",
         description="Le serveur est **ouvert** !\nClique sur le bouton ci-dessous pour te connecter directement.",
         color=0xff0000
     )
