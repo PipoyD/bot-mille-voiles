@@ -31,20 +31,25 @@ recrutement_status = {"active": True}
 def build_recrutement_embed() -> Embed:
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
-    return Embed(
-        title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
-        description=(
-            f"> - **Statut des recrutements :** {statut}\n\n"
+
+    description = f"> - **Statut des recrutements :** {statut}"
+
+    if recrutement_status["active"]:
+        description += (
+            "\n\n"
             "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
             "- **Nom RP :**\n"
             "- **Âge :**\n"
             "- **Fruit :**\n"
             "- **Niveau :**\n"
             "- **Aura :**"
-        ),
+        )
+
+    return Embed(
+        title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
+        description=description,
         color=couleur
     )
-
 class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     nom_rp = TextInput(label="Nom RP", placeholder="Ex: Akira le Flamme")
     age    = TextInput(label="Âge",    placeholder="Ex: 17 ans")
