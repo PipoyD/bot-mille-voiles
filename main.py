@@ -322,7 +322,11 @@ class CoffreNavigationView(View):
         self.index = index
         self.interaction_user_id = interaction_user_id
         self.message = None
-        self.countdown_task = None  # tâche pour le compteur
+        self.countdown_task = None
+    async def restart_countdown(self):
+    if self.countdown_task:
+        self.countdown_task.cancel()
+    self.countdown_task = bot.loop.create_task(self.start_countdown())
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.interaction_user_id:
@@ -361,11 +365,13 @@ class CoffreNavigationView(View):
     async def previous(self, interaction: discord.Interaction, button: Button):
         self.index = (self.index - 1) % len(ILE_COFFRES[self.ile])
         await self.update_embed(interaction)
-
+        await self.restart_countdown()
+    
     @discord.ui.button(label="➡️ Suivant", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, button: Button):
         self.index = (self.index + 1) % len(ILE_COFFRES[self.ile])
         await self.update_embed(interaction)
+        await self.restart_countdown()
 
     async def update_embed(self, interaction):
         emplacement = ILE_COFFRES[self.ile][self.index]
@@ -404,7 +410,7 @@ class IleSelect(discord.ui.Select):
         embed.set_image(url=emplacement["img"])
         await interaction.response.edit_message(embed=embed, view=view)
         view.message = await interaction.original_response()
-        bot.loop.create_task(view.start_countdown())
+        view.countdown_task = bot.loop.create_task(view.start_countdown())
 
 class IleSelectView(View):
     def __init__(self, user_id):
