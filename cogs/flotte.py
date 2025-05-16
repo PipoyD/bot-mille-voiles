@@ -22,11 +22,9 @@ ROLES = {
 
 def build_flotte_embed(guild: discord.Guild) -> Embed:
     """Construit et retourne l'Embed de la composition des flottes."""
-    # Récupère tous les membres avec le rôle MEMBRE (hors bots)
     membres_equipage = [
         m for m in guild.members
-        if any(r.id == ROLES["MEMBRE"] for r in m.roles)
-        and not m.bot
+        if any(r.id == ROLES["MEMBRE"] for r in m.roles) and not m.bot
     ]
 
     embed = Embed(
@@ -35,11 +33,9 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
         color=0xFFA500
     )
 
-    # Pour ne pas répéter un même membre dans plusieurs sections
     déjà_affichés = set()
 
     def filter_unique(role_id, flotte_id=None):
-        """Retourne la liste de membres portant role_id (et flotte_id si donné)."""
         return [
             m for m in guild.members
             if any(r.id == role_id for r in m.roles)
@@ -47,7 +43,6 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
         ]
 
     def filtrer(role_id, flotte_id=None):
-        """Garde chaque membre qu'une seule fois, puis le mentionne."""
         result = []
         for m in filter_unique(role_id, flotte_id):
             if m.id not in déjà_affichés:
@@ -55,7 +50,7 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
                 result.append(m.mention)
         return result or ["N/A"]
 
-    # --- Capitainerie ---
+    # Capitainerie
     embed.add_field(
         name="<:equipage:1358154724423106781> __** Capitainerie :**__",
         value=(
@@ -65,7 +60,7 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
         inline=False
     )
 
-    # --- 1ère Flotte : Écarlate ---
+    # 1ère Flotte – Écarlate
     embed.add_field(
         name="<:2meflotte:1372158586951696455> __**1ère Flotte : La Voile Écarlate**__",
         value="",
@@ -92,7 +87,7 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
         inline=False
     )
 
-    # --- 2ème Flotte : Azur ---
+    # 2ème Flotte – Azur
     embed.add_field(
         name="<:1reflotte:1372158546531324004> __**2ème Flotte : La Voile d'Azur**__",
         value="",
@@ -119,15 +114,14 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
         inline=False
     )
 
-    # --- Sans Flotte ---
+    # Sans flotte
     embed.add_field(name="__**Sans Flotte**__", value="", inline=False)
-    # Lieutenants sans flotte
     embed.add_field(
         name="🎖️ Lieutenants :",
         value="\n".join(filtrer(ROLES["LIEUTENANT"])),
         inline=False
     )
-    # Membres restants
+
     def membres_sans_flotte():
         rest = []
         for m in guild.members:
@@ -144,7 +138,6 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
         inline=False
     )
 
-    # Thumbnail, image et footer horodaté
     embed.set_thumbnail(url="https://i.imgur.com/w0G8DCx.png")
     embed.set_image(url="https://i.imgur.com/tqrOqYS.jpeg")
     paris = pytz.timezone("Europe/Paris")
@@ -155,7 +148,6 @@ def build_flotte_embed(guild: discord.Guild) -> Embed:
 
 
 class FlotteView(View):
-    """Vue persistante pour le bouton "Actualiser"."""
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -170,16 +162,13 @@ class FlotteView(View):
 
 
 class Flotte(commands.Cog):
-    """Cog qui regroupe la commande et la vue pour les flottes."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Enregistre la view pour que le bouton survive aux redémarrages
         bot.add_view(FlotteView())
 
     @commands.command(name="flottes")
     @commands.has_permissions(administrator=True)
     async def flottes(self, ctx: commands.Context):
-        """Affiche la composition actuelle des flottes."""
         await ctx.message.delete()
         embed = build_flotte_embed(ctx.guild)
         await ctx.send(embed=embed, view=FlotteView())
