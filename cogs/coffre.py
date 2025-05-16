@@ -61,6 +61,8 @@ class CoffreNavigationView(View):
             color=0xFFD700
         )
         embed.set_image(url=emplacement["img"])
+        # Ré-ajoute le footer à chaque update
+        embed.set_footer(text="⏳ Ce message sera supprimé dans 10 minutes")
         await interaction.response.edit_message(embed=embed, view=self)
         # Schedule deletion in 10 minutes
         asyncio.create_task(self._auto_delete(interaction.message))
