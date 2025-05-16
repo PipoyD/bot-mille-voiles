@@ -400,6 +400,7 @@ class IleSelect(discord.ui.Select):
             description=emplacement["desc"],
             color=0xFFD700
         )
+        embed.set_footer(text="⏳ Suppression dans 10 min")
         embed.set_image(url=emplacement["img"])
         await interaction.response.edit_message(embed=embed, view=view)
         view.message = await interaction.original_response()
@@ -423,6 +424,43 @@ async def coffre(ctx):
         color=0x00bfff
     )
     await ctx.send(embed=embed, view=IleSelectView(ctx.author.id))
+
+# ---------------------- Commande Help ----------------------
+
+@bot.command(name="help")
+async def help_command(ctx):
+    await ctx.message.delete()
+
+    embed = discord.Embed(
+        title="📖 Aide du Bot",
+        description="Voici la liste des commandes disponibles :",
+        color=0x3498db
+    )
+
+    embed.add_field(
+        name="📋 !recrutement *(Admin)*",
+        value="Affiche le formulaire de recrutement dans le salon. **Réservé aux administrateurs.**",
+        inline=False
+    )
+    embed.add_field(
+        name="⚓ !flottes *(Admin)*",
+        value="Affiche la composition actuelle des flottes. **Réservé aux administrateurs.**",
+        inline=False
+    )
+    embed.add_field(
+        name="📦 !coffre",
+        value="Permet de consulter les emplacements de coffres. **Réservé à l'équipage.**",
+        inline=False
+    )
+    embed.add_field(
+        name="❓ !help",
+        value="Affiche ce message d’aide.",
+        inline=False
+    )
+
+    embed.set_footer(text="Commandes soumises aux permissions Discord.")
+    await ctx.send(embed=embed)
+
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
