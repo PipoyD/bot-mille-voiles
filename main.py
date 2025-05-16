@@ -456,7 +456,7 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
-        name="🎮 !serveur", 
+        name="🎮 !serveur *(Admin)*", 
         value="Annonce l’ouverture du serveur One Piece **Réservé aux administrateurs.**.", 
         inline=False
     )
