@@ -2,14 +2,20 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Connexion Steam</title>
-  <meta http-equiv="refresh" content="0;url=steam://connect/208.115.196.10:27015" />
+  <title>Connexion au serveur...</title>
   <script>
+    // Lancer la connexion Steam
+    window.location.href = "steam://connect/208.115.196.11:27015";
+
+    // Fermer l’onglet après un court délai
     setTimeout(() => {
-      window.open('', '_self');
+      window.open('', '_self');  // nécessaire pour certains navigateurs
       window.close();
-    }, 3000); // 3 secondes pour laisser le temps à Steam de s’ouvrir
+    }, 1000); // délai de 5 secondes
   </script>
+  <style>
+    body { background: #000; margin: 0; }
+  </style>
 </head>
 <body></body>
 </html>
