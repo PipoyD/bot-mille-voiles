@@ -29,17 +29,13 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     aura = TextInput(label="Aura", placeholder="Ex: Fort / Moyen / Faible", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        display_name = interaction.user.display_name
-        embed = discord.Embed(title="📋 Nouvelle Candidature",
-                              description=f"👤 **Candidat :** {interaction.user.mention}",
-                              color=0x2f3136)
+        embed = discord.Embed(title="📋 Nouvelle Candidature", description=f"👤 **Candidat :** {interaction.user.mention}", color=0x2f3136)
         embed.add_field(name="Nom RP", value=self.nom_rp.value, inline=False)
         embed.add_field(name="Âge", value=self.age.value, inline=False)
         embed.add_field(name="Fruit", value=self.fruit.value, inline=False)
         embed.add_field(name="Niveau", value=self.niveau.value, inline=False)
         embed.add_field(name="Aura", value=self.aura.value, inline=False)
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
-
         message = await interaction.channel.send(content=f"<@&{RECRUTEUR_ROLE_ID}>", embed=embed)
         vote_data[str(message.id)] = {}
         save_votes()
@@ -89,25 +85,6 @@ class VoteView(View):
 
         await interaction.response.defer()
 
-@bot.event
-async def on_ready():
-    print(f"✅ Connecté en tant que {bot.user}")
-    bot.add_view(RecrutementView())
-    bot.add_view(FlotteView())
-
-    try:
-        channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
-        async for message in channel.history(limit=200):
-            if message.author.id != bot.user.id or not message.embeds:
-                continue
-            embed = message.embeds[0]
-            if embed.title != "📋 Nouvelle Candidature":
-                continue
-            await message.edit(view=VoteView())
-            print(f"🔁 Boutons restaurés pour : {message.id}")
-    except Exception as e:
-        print(f"❌ Erreur restauration boutons : {e}")
-
 class RecrutementView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -116,26 +93,17 @@ class RecrutementView(View):
 
 class FormulaireButton(Button):
     def __init__(self):
-        super().__init__(
-            label="📋 Remplir le formulaire",
-            style=discord.ButtonStyle.primary,
-            custom_id="formulaire_button",
-            disabled=not recrutement_status["active"]
-        )
+        super().__init__(label="📋 Remplir le formulaire", style=discord.ButtonStyle.primary, custom_id="formulaire_button", disabled=not recrutement_status["active"])
 
     async def callback(self, interaction: discord.Interaction):
         if not recrutement_status["active"]:
             await interaction.response.send_message("🚫 Le recrutement est fermé.", ephemeral=True)
-            return
-        await interaction.response.send_modal(RecrutementModal())
+        else:
+            await interaction.response.send_modal(RecrutementModal())
 
 class AdminToggleButton(Button):
     def __init__(self):
-        super().__init__(
-            label="🛠️ Changer le statut",
-            style=discord.ButtonStyle.secondary,
-            custom_id="admin_toggle"
-        )
+        super().__init__(label="🛠️ Changer le statut", style=discord.ButtonStyle.secondary, custom_id="admin_toggle")
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
@@ -143,36 +111,39 @@ class AdminToggleButton(Button):
             return
 
         recrutement_status["active"] = not recrutement_status["active"]
-        embed = build_recrutement_embed()
-        view = RecrutementView()
-        await interaction.message.edit(embed=embed, view=view)
-        await interaction.response.send_message(
-            f"✅ Statut mis à jour : {'ON' if recrutement_status['active'] else 'OFF'}",
-            ephemeral=True
-        )
+        await interaction.message.edit(embed=build_recrutement_embed(), view=RecrutementView())
+        await interaction.response.send_message(f"✅ Statut mis à jour : {'ON' if recrutement_status['active'] else 'OFF'}", ephemeral=True)
 
 def build_recrutement_embed():
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
-    embed = discord.Embed(
-        title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
-        description=(
-            f"> - **Statut des recrutements :** {statut}\n\n"
-            "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
-            "- **Nom RP :**\n"
-            "- **Âge :**\n"
-            "- **Fruit :**\n"
-            "- **Niveau :**\n"
-            "- **Aura :**"
-        ),
-        color=couleur
-    )
-    return embed
+    description = f"""> - **Statut des recrutements :** {statut}
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def recrutement(ctx):
-    await ctx.message.delete()
-    embed = build_recrutement_embed()
-    view = RecrutementView()
-    await ctx.send(embed=embed, view=view)
+__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__
+
+- **Nom RP :**
+- **Âge :**
+- **Fruit :**
+- **Niveau :**
+- **Aura :**"""
+    return discord.Embed(title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__", description=description, color=couleur)
+
+async def setup_recrutement(bot):
+    bot.add_view(RecrutementView())
+    bot.add_view(VoteView())
+
+    @bot.command()
+    @commands.has_permissions(administrator=True)
+    async def recrutement(ctx):
+        await ctx.message.delete()
+        embed = build_recrutement_embed()
+        view = RecrutementView()
+        await ctx.send(embed=embed, view=view)
+
+    try:
+        channel = await bot.fetch_channel(VOTE_CHANNEL_ID)
+        async for message in channel.history(limit=200):
+            if message.author.id == bot.user.id and message.embeds and message.embeds[0].title == "📋 Nouvelle Candidature":
+                await message.edit(view=VoteView())
+    except Exception as e:
+        print(f"❌ Erreur restauration boutons : {e}")
