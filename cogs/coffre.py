@@ -8,9 +8,23 @@ RECRUTEUR_ROLE_ID = 1317850709948891177
 ILE_COFFRES = {
     "Logue Town": [
         {"desc": "Derrière Fushia News", "img": "https://i.imgur.com/BaLuctc.png"},
-        # … reste des emplacements …
+        {"desc": "Rue à droite en face de la Mairie", "img": "https://i.imgur.com/Ls3L6H2.png"},
+        {"desc": "Batiment collé à gauche du QG Marine", "img": "https://i.imgur.com/UHVFxLY.png"},
+        {"desc": "Derrière la Mairie", "img": "https://i.imgur.com/zMKd2ts.png"},
+        {"desc": "Batiment à droite de la Banque entre la falaise", "img": "https://i.imgur.com/HMmEMpW.png"},
+        {"desc": "Ruelle diagonale à droite du bar", "img": "https://i.imgur.com/WHcRTW2.png"},
+        {"desc": "Maison du Phare", "img": "https://i.imgur.com/vvKqaX3.png"},
     ],
-    # … autres îles …
+    "Arlong Park": [
+        {"desc": "Sous le pont cassé", "img": "https://example.com/image1.jpg"},
+        {"desc": "Derrière la statue de requin", "img": "https://example.com/image2.jpg"},
+        {"desc": "Dans la cabane du chef", "img": "https://example.com/image3.jpg"},
+    ],
+    "Fushia": [
+        {"desc": "Près du bar de Makino", "img": "https://example.com/image4.jpg"},
+        {"desc": "Derrière le moulin", "img": "https://example.com/image5.jpg"},
+        {"desc": "Sous le vieux chêne", "img": "https://example.com/image6.jpg"},
+    ]
 }
 
 class CoffreNavigationView(View):
