@@ -17,11 +17,11 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user}")
-    await setup_recrutement(bot)
-    await setup_flotte(bot)
-    await setup_coffres(bot)
-    setup_steam_button(bot)
-    setup_help(bot)
+    await setup_recrutement()
+    await setup_flotte()
+    await setup_coffres()
+    setup_steam_button()
+    setup_help()
 
 token = os.getenv("TOKEN")
 if not token:
