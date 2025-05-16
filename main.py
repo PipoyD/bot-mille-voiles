@@ -431,7 +431,9 @@ async def coffre(ctx):
         description="Sur quelle île veux-tu voir les emplacements de coffre ?",
         color=0x00bfff
     )
-    await ctx.send(embed=embed, view=IleSelectView(ctx.author.id))
+    embed.set_footer(text="⏳ Suppression automatique dans 10 min")
+    await ctx.send(embed=embed, view=IleSelectView(ctx.author.id), delete_after=600)
+
 
 # ---------------------- Commande Help ----------------------
 
