@@ -322,12 +322,6 @@ class CoffreNavigationView(View):
         self.index = index
         self.interaction_user_id = interaction_user_id
         self.message = None
-        self.countdown_task = None
-        self.remaining = 600
-        async def restart_countdown(self):
-            if self.countdown_task:
-                self.countdown_task.cancel()
-            self.countdown_task = bot.loop.create_task(self.start_countdown())
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.interaction_user_id:
@@ -342,37 +336,15 @@ class CoffreNavigationView(View):
             except discord.NotFound:
                 pass
 
-    async def start_countdown(self):
-        while self.remaining > 0:
-            await asyncio.sleep(60)
-            self.remaining -= 60
-            if not self.message:
-                break
-            try:
-                emplacement = ILE_COFFRES[self.ile][self.index]
-                embed = discord.Embed(
-                    title=f"📦 Emplacement du coffre ({self.ile})",
-                    description=emplacement["desc"],
-                    color=0xFFD700
-                )
-                embed.set_image(url=emplacement["img"])
-                embed.set_footer(text=f"⏳ Suppression dans {self.remaining // 60} min")
-                await self.message.edit(embed=embed, view=self)
-            except Exception:
-                break
-
-
     @discord.ui.button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary)
     async def previous(self, interaction: discord.Interaction, button: Button):
         self.index = (self.index - 1) % len(ILE_COFFRES[self.ile])
         await self.update_embed(interaction)
-        await self.restart_countdown()
-    
+
     @discord.ui.button(label="➡️ Suivant", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, button: Button):
         self.index = (self.index + 1) % len(ILE_COFFRES[self.ile])
         await self.update_embed(interaction)
-        await self.restart_countdown()
 
     async def update_embed(self, interaction):
         emplacement = ILE_COFFRES[self.ile][self.index]
@@ -382,7 +354,6 @@ class CoffreNavigationView(View):
             color=0xFFD700
         )
         embed.set_image(url=emplacement["img"])
-        embed.set_footer(text=f"⏳ Suppression dans {self.remaining // 60} min")
         await interaction.response.edit_message(embed=embed, view=self)
 
 class IleSelect(discord.ui.Select):
