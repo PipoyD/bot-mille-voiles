@@ -174,5 +174,5 @@ class Flotte(commands.Cog):
         await ctx.send(embed=embed, view=FlotteView())
 
 
-def setup(bot: commands.Bot):
-    bot.add_cog(Flotte(bot))
+async def setup(bot):
+    await bot.add_cog(Flotte(bot))
