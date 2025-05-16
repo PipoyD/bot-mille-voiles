@@ -464,8 +464,8 @@ async def help_command(ctx):
         inline=False
     )
 
-    embed.set_footer(text="Commandes soumises aux permissions Discord.")
-    await ctx.send(embed=embed)
+    embed.set_footer(text="Ce message disparaîtra automatiquement dans 10 minutes ⏳")
+    await ctx.send(embed=embed, delete_after=600)
 
 
 # ---------------------- Lancement sécurisé ----------------------
