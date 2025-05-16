@@ -4,14 +4,12 @@
   <meta charset="UTF-8" />
   <title>Connexion au serveur...</title>
   <script>
-    // Lancer la connexion Steam
     window.location.href = "steam://connect/208.115.196.11:27015";
 
-    // Fermer l’onglet après un court délai
     setTimeout(() => {
-      window.open('', '_self');  // nécessaire pour certains navigateurs
+      window.open('', '_self');
       window.close();
-    }, 1000); // délai de 5 secondes
+    }, 1000);
   </script>
   <style>
     body { background: #000; margin: 0; }
