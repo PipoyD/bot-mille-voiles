@@ -383,7 +383,6 @@ class IleSelect(discord.ui.Select):
         embed.set_image(url=emplacement["img"])
         await interaction.response.edit_message(embed=embed, view=view)
         view.message = await interaction.original_response()
-        view.countdown_task = bot.loop.create_task(view.start_countdown())
 
 class IleSelectView(View):
     def __init__(self, user_id):
