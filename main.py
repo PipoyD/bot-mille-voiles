@@ -302,7 +302,7 @@ ILE_COFFRES = {
         {"desc": "Batiment à droite de la Banque entre la falaise", "img": "https://i.imgur.com/HMmEMpW.png"},
         {"desc": "Ruelle diagonale à droite du bar", "img": "https://i.imgur.com/WHcRTW2.png"},
         {"desc": "Maison du Phare", "img": "https://i.imgur.com/vvKqaX3.png"},
-    ]
+    ],
     "Arlong Park": [
         {"desc": "Sous le pont cassé", "img": "https://example.com/image1.jpg"},
         {"desc": "Derrière la statue de requin", "img": "https://example.com/image2.jpg"},
