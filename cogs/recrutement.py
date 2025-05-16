@@ -169,10 +169,15 @@ class Recrutement(commands.Cog):
         statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
         couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
         embed = Embed(
-            title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
+        title="__𝙍𝙚𝙘𝙧𝙪𝙩𝙚𝙢𝙚𝙣𝙩__",
             description=(
-                f"> **Statut :** {statut}\n\n"
-                "__Prépare : Nom RP, Âge, Fruit, Niveau, Aura__"
+                f"> - **Statut des recrutements :** {statut}\n\n"
+                "__Veuillez soumettre votre candidature en préparant les informations ci-dessous :__\n\n"
+                "- **Nom RP :**\n"
+                "- **Âge :**\n"
+                "- **Fruit :**\n"
+                "- **Niveau :**\n"
+                "- **Aura :**"
             ),
             color=couleur
         )
