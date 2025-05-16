@@ -21,5 +21,5 @@ class Help(commands.Cog):
         embed.set_footer(text="Ce message disparaîtra automatiquement dans 5 minutes ⏳")
         await ctx.send(embed=embed, delete_after=300)
 
-def setup(bot: commands.Bot):
-    bot.add_cog(Help(bot))
+async def setup(bot):
+    await bot.add_cog(Help(bot))
