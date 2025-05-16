@@ -1,5 +1,6 @@
 # cogs/coffre.py
 
+import asyncio
 import discord
 from discord.ext import commands
 from discord.ui import View, Select
@@ -31,7 +32,7 @@ ILE_COFFRES = {
 
 class CoffreNavigationView(View):
     def __init__(self, ile: str, index: int, user_id: int):
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.ile = ile
         self.index = index
         self.user_id = user_id
@@ -61,8 +62,18 @@ class CoffreNavigationView(View):
         )
         embed.set_image(url=emplacement["img"])
         await interaction.response.edit_message(embed=embed, view=self)
+        # Schedule deletion in 10 minutes
+        asyncio.create_task(self._auto_delete(interaction.message))
 
-class IleSelect(discord.ui.Select):
+    async def _auto_delete(self, message: discord.Message):
+        await asyncio.sleep(600)
+        try:
+            await message.delete()
+        except discord.NotFound:
+            pass
+
+
+class IleSelect(Select):
     def __init__(self, user_id: int):
         options = [
             discord.SelectOption(label=ile, description=f"Voir les coffres de {ile}")
@@ -76,7 +87,6 @@ class IleSelect(discord.ui.Select):
             return await interaction.response.send_message("🚫 Ce menu ne t'est pas destiné.", ephemeral=True)
 
         ile = self.values[0]
-        # Affiche le premier emplacement
         view = CoffreNavigationView(ile, 0, self.user_id)
         emplacement = ILE_COFFRES[ile][0]
         embed = Embed(
@@ -84,14 +94,18 @@ class IleSelect(discord.ui.Select):
             description=emplacement["desc"],
             color=0xFFD700
         )
-        embed.set_footer(text="⏳ Suppression dans 10 min")
+        embed.set_footer(text="⏳ Ce message sera supprimé dans 10 minutes")
         embed.set_image(url=emplacement["img"])
         await interaction.response.edit_message(embed=embed, view=view)
+        # Schedule deletion in 10 minutes
+        asyncio.create_task(view._auto_delete(interaction.message))
+
 
 class IleSelectView(View):
     def __init__(self, user_id: int):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)
         self.add_item(IleSelect(user_id))
+
 
 class Coffre(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -108,11 +122,20 @@ class Coffre(commands.Cog):
             description="Sur quelle île veux-tu voir les emplacements de coffre ?",
             color=0x00BFFF
         )
-        embed.set_footer(text="⏳ Suppression auto dans 10 minutes")
+        embed.set_footer(text="⏳ Ce message sera supprimé dans 10 minutes")
 
         view = IleSelectView(ctx.author.id)
-        await ctx.send(embed=embed, view=view, delete_after=600)
+        message = await ctx.send(embed=embed, view=view)
+        # Schedule deletion of the initial embed in 10 minutes
+        asyncio.create_task(self._auto_delete(message))
 
-async def setup(bot):
+    async def _auto_delete(self, message: discord.Message):
+        await asyncio.sleep(600)
+        try:
+            await message.delete()
+        except discord.NotFound:
+            pass
+
+
+async def setup(bot: commands.Bot):
     await bot.add_cog(Coffre(bot))
-
