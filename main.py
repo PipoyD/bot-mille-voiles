@@ -2,6 +2,7 @@ import os
 import discord
 import json
 import pytz
+import asyncio
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 from datetime import datetime
@@ -316,11 +317,12 @@ ILE_COFFRES = {
 }
 class CoffreNavigationView(View):
     def __init__(self, ile, index, interaction_user_id):
-        super().__init__(timeout=600)  # 10 minutes = 600 secondes
+        super().__init__(timeout=600)
         self.ile = ile
         self.index = index
         self.interaction_user_id = interaction_user_id
-        self.message = None  # Stocke le message à supprimer
+        self.message = None
+        self.countdown_task = None  # tâche pour le compteur
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.interaction_user_id:
@@ -334,6 +336,26 @@ class CoffreNavigationView(View):
                 await self.message.delete()
             except discord.NotFound:
                 pass
+
+    async def start_countdown(self):
+        remaining = 600  # 10 minutes
+        while remaining > 0:
+            await asyncio.sleep(60)
+            remaining -= 60
+            if not self.message:
+                break
+            try:
+                emplacement = ILE_COFFRES[self.ile][self.index]
+                embed = discord.Embed(
+                    title=f"📦 Emplacement du coffre ({self.ile})",
+                    description=emplacement["desc"],
+                    color=0xFFD700
+                )
+                embed.set_image(url=emplacement["img"])
+                embed.set_footer(text=f"⏳ Suppression dans {remaining // 60} min")
+                await self.message.edit(embed=embed, view=self)
+            except Exception:
+                break
 
     @discord.ui.button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary)
     async def previous(self, interaction: discord.Interaction, button: Button):
@@ -381,6 +403,7 @@ class IleSelect(discord.ui.Select):
         embed.set_image(url=emplacement["img"])
         await interaction.response.edit_message(embed=embed, view=view)
         view.message = await interaction.original_response()
+        bot.loop.create_task(view.start_countdown())
 
 class IleSelectView(View):
     def __init__(self, user_id):
