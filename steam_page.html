@@ -1,29 +1,15 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Connexion Steam</title>
-  <meta http-equiv="refresh" content="1;url=steam://connect/208.115.196.10:27015">
-  <style>
-    body {
-      background: #0f0f0f;
-      color: white;
-      font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      text-align: center;
-    }
-    a {
-      color: #1b9fff;
-      font-size: 1.2rem;
-    }
-  </style>
+  <meta http-equiv="refresh" content="0;url=steam://connect/208.115.196.11:27015" />
+  <script>
+    setTimeout(() => {
+      window.open('', '_self');
+      window.close();
+    }, 3000); // 3 secondes pour laisser le temps à Steam de s’ouvrir
+  </script>
 </head>
-<body>
-  <p>Connexion au serveur Steam...</p>
-  <p><a href="steam://connect/208.115.196.10:27015">👉 Clique ici si la connexion ne démarre pas</a></p>
-</body>
+<body></body>
 </html>
