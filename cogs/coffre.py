@@ -10,13 +10,13 @@ RECRUTEUR_ROLE_ID = 1317850709948891177
 
 ILE_COFFRES = {
     "Logue Town": [
-        {"desc": "Derrière Fushia News", "img": "https://i.imgur.com/BaLuctc.png"},
-        {"desc": "Rue à droite en face de la Mairie", "img": "https://i.imgur.com/Ls3L6H2.png"},
-        {"desc": "Bâtiment collé à gauche du QG Marine", "img": "https://i.imgur.com/UHVFxLY.png"},
-        {"desc": "Derrière la Mairie", "img": "https://i.imgur.com/zMKd2ts.png"},
-        {"desc": "Bâtiment à droite de la Banque entre la falaise", "img": "https://i.imgur.com/HMmEMpW.png"},
-        {"desc": "Ruelle diagonale à droite du bar", "img": "https://i.imgur.com/WHcRTW2.png"},
-        {"desc": "Maison du Phare", "img": "https://i.imgur.com/vvKqaX3.png"},
+        {"desc": "Derrière Fushia News [1/7]", "img": "https://i.imgur.com/BaLuctc.png"},
+        {"desc": "Rue à droite en face de la Mairie [2/7]", "img": "https://i.imgur.com/Ls3L6H2.png"},
+        {"desc": "Bâtiment collé à gauche du QG Marine [3/7]", "img": "https://i.imgur.com/UHVFxLY.png"},
+        {"desc": "Derrière la Mairie [4/7]", "img": "https://i.imgur.com/zMKd2ts.png"},
+        {"desc": "Bâtiment à droite de la Banque entre la falaise [5/7]", "img": "https://i.imgur.com/HMmEMpW.png"},
+        {"desc": "Ruelle diagonale à droite du bar [6/7]", "img": "https://i.imgur.com/WHcRTW2.png"},
+        {"desc": "Maison du Phare [7/7]", "img": "https://i.imgur.com/vvKqaX3.png"},
     ],
     "Arlong Park": [
         {"desc": "Sous le pont cassé", "img": "https://example.com/image1.jpg"},
