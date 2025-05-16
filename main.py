@@ -474,17 +474,21 @@ async def help_command(ctx):
 class SteamButtonView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(Button(label="🎮 Se connecter au serveur", url="https://pipoyd.github.io/bot-mille-voiles/steam_page.html"))
+        self.add_item(Button(
+            label="🎮 Se connecter au serveur",
+            url="https://pipoyd.github.io/bot-mille-voiles/steam_page.html"
+        ))
 
 @bot.command()
 async def serveur(ctx):
     await ctx.message.delete()
     embed = discord.Embed(
-        title="🎮 Rejoins le serveur One Piece",
-        description="Clique sur le bouton ci-dessous pour te connecter directement au serveur.",
-        color=0x1b2838
+        title="🟥 Ouverture du Serveur One Piece",
+        description="Le serveur est **ouvert** !\nClique sur le bouton ci-dessous pour te connecter directement.",
+        color=0xff0000
     )
-    await ctx.send(embed=embed, view=SteamButtonView(), delete_after=600)
+    await ctx.send(content="@everyone", embed=embed, view=SteamButtonView())
+
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
