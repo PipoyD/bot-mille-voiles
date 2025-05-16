@@ -477,10 +477,10 @@ class SteamButtonView(View):
         self.add_item(Button(label="🎮 Se connecter au serveur", url="https://pipoyd.github.io/bot-mille-voiles/steam_page.html"))
 
 @bot.command()
-async def steam(ctx):
+async def serveur(ctx):
     await ctx.message.delete()
     embed = discord.Embed(
-        title="🎮 Rejoins le serveur Steam",
+        title="🎮 Rejoins le serveur One Piece",
         description="Clique sur le bouton ci-dessous pour te connecter directement au serveur.",
         color=0x1b2838
     )
