@@ -473,8 +473,8 @@ async def help_command(ctx):
         inline=False
     )
 
-    embed.set_footer(text="Ce message disparaîtra automatiquement dans 10 minutes ⏳")
-    await ctx.send(embed=embed, delete_after=600)
+    embed.set_footer(text="Ce message disparaîtra automatiquement dans 5 minutes ⏳")
+    await ctx.send(embed=embed, delete_after=300)
 
 # ---------------------- Commande de connexion ----------------------
 
