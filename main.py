@@ -467,6 +467,16 @@ async def help_command(ctx):
     embed.set_footer(text="Ce message disparaîtra automatiquement dans 10 minutes ⏳")
     await ctx.send(embed=embed, delete_after=600)
 
+# ---------------------- Commande de connexion ----------------------
+
+@bot.command()
+async def serveur(ctx):
+    embed = discord.Embed(
+        title="🎮 Rejoins le serveur Steam",
+        description="[Clique ici pour te connecter](steam://connect/208.115.196.11:27015)",
+        color=0x1b2838
+    )
+    await ctx.send(embed=embed)
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
