@@ -323,10 +323,10 @@ class CoffreNavigationView(View):
         self.interaction_user_id = interaction_user_id
         self.message = None
         self.countdown_task = None
-    async def restart_countdown(self):
-    if self.countdown_task:
-        self.countdown_task.cancel()
-    self.countdown_task = bot.loop.create_task(self.start_countdown())
+        async def restart_countdown(self):
+            if self.countdown_task:
+                self.countdown_task.cancel()
+            self.countdown_task = bot.loop.create_task(self.start_countdown())
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.interaction_user_id:
