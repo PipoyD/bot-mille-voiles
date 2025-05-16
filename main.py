@@ -323,6 +323,7 @@ class CoffreNavigationView(View):
         self.interaction_user_id = interaction_user_id
         self.message = None
         self.countdown_task = None
+        self.remaining = 600
         async def restart_countdown(self):
             if self.countdown_task:
                 self.countdown_task.cancel()
@@ -342,10 +343,9 @@ class CoffreNavigationView(View):
                 pass
 
     async def start_countdown(self):
-        remaining = 600  # 10 minutes
-        while remaining > 0:
+        while self.remaining > 0:
             await asyncio.sleep(60)
-            remaining -= 60
+            self.remaining -= 60
             if not self.message:
                 break
             try:
@@ -356,10 +356,11 @@ class CoffreNavigationView(View):
                     color=0xFFD700
                 )
                 embed.set_image(url=emplacement["img"])
-                embed.set_footer(text=f"⏳ Suppression dans {remaining // 60} min")
+                embed.set_footer(text=f"⏳ Suppression dans {self.remaining // 60} min")
                 await self.message.edit(embed=embed, view=self)
             except Exception:
                 break
+
 
     @discord.ui.button(label="⬅️ Précédent", style=discord.ButtonStyle.secondary)
     async def previous(self, interaction: discord.Interaction, button: Button):
@@ -381,6 +382,7 @@ class CoffreNavigationView(View):
             color=0xFFD700
         )
         embed.set_image(url=emplacement["img"])
+        embed.set_footer(text=f"⏳ Suppression dans {self.remaining // 60} min")
         await interaction.response.edit_message(embed=embed, view=self)
 
 class IleSelect(discord.ui.Select):
@@ -469,14 +471,20 @@ async def help_command(ctx):
 
 # ---------------------- Commande de connexion ----------------------
 
+class SteamButtonView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(Button(label="🎮 Se connecter au serveur", url="https://steamconnect.net/ip/208.115.196.11:27015"))
+
 @bot.command()
-async def serveur(ctx):
+async def steam(ctx):
+    await ctx.message.delete()
     embed = discord.Embed(
         title="🎮 Rejoins le serveur Steam",
-        description="[Clique ici pour te connecter](steam://connect/208.115.196.11:27015)",
+        description="Clique sur le bouton ci-dessous pour te connecter directement au serveur.",
         color=0x1b2838
     )
-    await ctx.send(embed=embed)
+    await ctx.send(embed=embed, view=SteamButtonView(), delete_after=600)
 
 # ---------------------- Lancement sécurisé ----------------------
 token = os.getenv("TOKEN")
