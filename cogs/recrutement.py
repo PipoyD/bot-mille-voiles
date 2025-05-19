@@ -40,7 +40,7 @@ def build_recrutement_embed(guild: discord.Guild) -> Embed:
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
 
     description = (
-        f"> - **Effectif recruteurs :** {effectif}\n"
+        f"> - **Effectif :** {effectif}\n"
         f"> - **Statut des recrutements :** {statut}"
     )
     if recrutement_status["active"]:
