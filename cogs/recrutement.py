@@ -3,6 +3,7 @@
 import os
 import json
 import pytz
+import asyncio
 from datetime import datetime
 
 import discord
@@ -60,12 +61,10 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     aura   = TextInput(label="Aura",   placeholder="Ex: Fort / Moyen / Faible")
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Compter le nombre de votants possibles (membres avec le rôle recruteur)
         guild = interaction.guild
         role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
         total_votants = len(role.members) if role else 0
 
-        # Construire la description de l'embed avec le candidat et le nombre de votants
         desc = (
             f"👤 **Candidat :** {interaction.user.mention}\n\n"
             f"> **Votants possibles :** {total_votants}"
@@ -76,7 +75,6 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
             color=0x2f3136
         )
 
-        # Ajouter les champs du formulaire
         for name, field in [
             ("Nom RP", self.nom_rp), ("Âge", self.age),
             ("Fruit", self.fruit), ("Niveau", self.niveau),
@@ -86,12 +84,10 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
 
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
-        # Envoyer l'embed et initialiser les votes
         msg = await interaction.channel.send(
             content=f"<@&{RECRUTEUR_ROLE_ID}>",
             embed=embed
         )
-        # On stocke à la fois le candidat et le mapping des votes
         vote_data[str(msg.id)] = {
             "candidate": interaction.user.id,
             "votes": {}
@@ -116,7 +112,6 @@ class VoteView(View):
         await self._vote(interaction, "contre")
 
     async def _vote(self, interaction: discord.Interaction, choix: str):
-        # Vérifier rôle recruteur
         if RECRUTEUR_ROLE_ID not in [r.id for r in interaction.user.roles]:
             return await interaction.response.send_message(
                 "🚫 Seuls les recruteurs peuvent voter.", ephemeral=True
@@ -125,13 +120,11 @@ class VoteView(View):
         mid = str(interaction.message.id)
         data = vote_data.get(mid)
         if data is None:
-            # Message non géré
             return await interaction.response.defer()
 
         votes = data.setdefault("votes", {})
         uid = str(interaction.user.id)
 
-        # Toggle vote
         if votes.get(uid) == choix:
             del votes[uid]
         else:
@@ -139,32 +132,29 @@ class VoteView(View):
 
         save_votes(vote_data)
 
-        # Recalcul des scores
         p = sum(1 for v in votes.values() if v == "pour")
         c = sum(1 for v in votes.values() if v == "contre")
 
-        # Mettre à jour l'embed
         embed = interaction.message.embeds[0]
         embed.color = 0x00ff00 if p > c else 0xff0000 if c > p else 0x2f3136
         embed.set_footer(text=f"Votes : ✅ {p} | ❌ {c}")
         await interaction.message.edit(embed=embed, view=self)
 
-        # Vérifier si majorité atteinte
+        # majorité
         guild = interaction.guild
         role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
         total_votants = len(role.members) if role else 0
         half = total_votants / 2
 
         if p > half or c > half:
-            # Désactiver les boutons
             for child in self.children:
                 child.disabled = True
             await interaction.message.edit(view=self)
 
-            # Déterminer résultat
             accepted = (p > half)
             candidate_id = data.get("candidate")
-            # Notifier le candidat en DM
+
+            # DM candidat
             try:
                 member = guild.get_member(candidate_id)
                 user = member or await interaction.client.fetch_user(candidate_id)
@@ -173,15 +163,34 @@ class VoteView(View):
                     f"Bonjour, votre candidature sur **{guild.name}** a été **{result_text}**."
                 )
             except Exception:
-                pass  # Silencie les erreurs de DM
+                pass
 
-            # Envoyer un message dans le canal pour les recruteurs
+            # Message verdict
             outcome = "acceptée 🎉" if accepted else "refusée ❌"
-            await interaction.channel.send(
+            verdict_msg = await interaction.channel.send(
                 f"📢 La candidature de <@{candidate_id}> a été **{outcome}**."
             )
 
+            # Planifier suppression
+            asyncio.create_task(
+                self._schedule_deletions(interaction.message, verdict_msg)
+            )
+
         await interaction.response.defer()
+
+    async def _schedule_deletions(self, embed_msg: discord.Message, verdict_msg: discord.Message):
+        # supprime l'embed de candidature après 1 jour
+        await asyncio.sleep(86400)
+        try:
+            await embed_msg.delete()
+        except Exception:
+            pass
+        # supprime le message de verdict après 2 jours
+        await asyncio.sleep(86400)
+        try:
+            await verdict_msg.delete()
+        except Exception:
+            pass
 
 class FormulaireButton(Button):
     def __init__(self):
