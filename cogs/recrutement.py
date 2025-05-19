@@ -14,7 +14,7 @@ from discord.ui import View, Button, Modal, TextInput
 VOTE_FILE           = "data/votes.json"
 RECRUTEUR_ROLE_ID   = 1317850709948891177
 VOTE_CHANNEL_ID     = 1371557531373277376
-LOG_CHANNEL_ID      = 1374033665482428558
+LOG_CHANNEL_ID      = 1374033665482428558  # <— canal de log demandé
 
 def load_votes():
     try:
@@ -31,20 +31,11 @@ def save_votes(data):
 vote_data = load_votes()
 recrutement_status = {"active": True}
 
-def build_recrutement_embed(guild: discord.Guild) -> Embed:
-    # Compte l'effectif des recruteurs
-    role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
-    effectif = len(role.members) if role else 0
-
+def build_recrutement_embed() -> Embed:
     statut = "✅ ON" if recrutement_status["active"] else "❌ OFF"
     couleur = 0x00ff99 if recrutement_status["active"] else 0xff4444
 
-    # Affiche l'effectif puis le statut
-    description = (
-        f"> - **Effectif des recruteurs :** {effectif}\n"
-        f"> - **Statut des recrutements :** {statut}"
-    )
-
+    description = f"> - **Statut des recrutements :** {statut}"
     if recrutement_status["active"]:
         description += (
             "\n\n"
@@ -74,6 +65,7 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
         total_votants = len(role.members) if role else 0
 
+        # Construction de l'embed de candidature
         desc = (
             f"👤 **Candidat :** {interaction.user.mention}\n\n"
             f"> **Votants possibles :** {total_votants}"
@@ -83,6 +75,7 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
             description=desc,
             color=0x2f3136
         )
+        # Champs du formulaire
         for name, field in [
             ("Nom RP", self.nom_rp), ("Âge", self.age),
             ("Fruit", self.fruit), ("Niveau", self.niveau),
@@ -91,6 +84,7 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
             embed.add_field(name=name, value=field.value, inline=False)
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
+        # Envoi dans le canal de recrutement
         msg = await interaction.channel.send(
             content=f"<@&{RECRUTEUR_ROLE_ID}>",
             embed=embed
@@ -103,7 +97,7 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         await msg.edit(view=VoteView())
         await interaction.response.send_message("✅ Candidature envoyée !", ephemeral=True)
 
-        # Log nouvelle candidature
+        # Log dans le canal de log
         try:
             log_chan = interaction.client.get_channel(LOG_CHANNEL_ID)
             if log_chan:
@@ -113,14 +107,14 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
                     color=0x2f3136,
                     timestamp=datetime.utcnow()
                 )
-                log.add_field(name="Nom RP", value=self.nom_rp.value, inline=True)
-                log.add_field(name="Âge",    value=self.age.value,    inline=True)
-                log.add_field(name="Fruit",  value=self.fruit.value,  inline=True)
-                log.add_field(name="Niveau", value=self.niveau.value, inline=True)
-                log.add_field(name="Aura",   value=self.aura.value,   inline=True)
+                log.add_field(name="Nom RP",   value=self.nom_rp.value, inline=True)
+                log.add_field(name="Âge",      value=self.age.value,    inline=True)
+                log.add_field(name="Fruit",    value=self.fruit.value,  inline=True)
+                log.add_field(name="Niveau",   value=self.niveau.value, inline=True)
+                log.add_field(name="Aura",     value=self.aura.value,   inline=True)
                 await log_chan.send(embed=log)
-        except:
-            pass
+        except Exception:
+            pass  # ne pas bloquer en cas d'erreur de log
 
 class VoteView(View):
     def __init__(self):
@@ -147,26 +141,31 @@ class VoteView(View):
 
         votes = data.setdefault("votes", {})
         uid = str(interaction.user.id)
+        # Toggle
         if votes.get(uid) == choix:
             del votes[uid]
         else:
             votes[uid] = choix
         save_votes(vote_data)
 
+        # Comptage
         p = sum(v == "pour" for v in votes.values())
         c = sum(v == "contre" for v in votes.values())
 
+        # Mise à jour embed
         embed = interaction.message.embeds[0]
         embed.color = 0x00ff00 if p > c else 0xff0000 if c > p else 0x2f3136
         embed.set_footer(text=f"Votes : ✅ {p} | ❌ {c}")
         await interaction.message.edit(embed=embed, view=self)
 
+        # Vérifier majorité
         guild = interaction.guild
         role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
         total_votants = len(role.members) if role else 0
         half = total_votants / 2
 
         if p > half or c > half:
+            # Désactivation des boutons
             for child in self.children:
                 child.disabled = True
             await interaction.message.edit(view=self)
@@ -174,7 +173,7 @@ class VoteView(View):
             accepted = (p > half)
             candidate_id = data["candidate"]
 
-            # DM candidat
+            # DM au candidat
             result_text = "ACCEPTÉE 🎉" if accepted else "REFUSÉE ❌"
             try:
                 member = guild.get_member(candidate_id)
@@ -182,7 +181,7 @@ class VoteView(View):
                 await user.send(
                     f"Bonjour, votre candidature sur **{guild.name}** a été **{result_text}**."
                 )
-            except:
+            except Exception:
                 pass
 
             # Message verdict public
@@ -205,10 +204,10 @@ class VoteView(View):
                     log.add_field(name="Contre",   value=str(c), inline=True)
                     log.add_field(name="Résultat", value=result_text, inline=True)
                     await log_chan.send(embed=log)
-            except:
+            except Exception:
                 pass
 
-            # Planifier suppressions
+            # Planifier suppression automatique
             asyncio.create_task(
                 self._schedule_deletions(interaction.message, verdict_msg)
             )
@@ -216,14 +215,18 @@ class VoteView(View):
         await interaction.response.defer()
 
     async def _schedule_deletions(self, embed_msg: discord.Message, verdict_msg: discord.Message):
-        # supprime l'embed de candidature après 24 h
+        # suppression embed candidature 24h après verdict
         await asyncio.sleep(86400)
-        try: await embed_msg.delete()
-        except: pass
-        # supprime le verdict après 48 h (24 h de plus)
+        try:
+            await embed_msg.delete()
+        except:
+            pass
+        # suppression message verdict 48h après verdict (24h de plus)
         await asyncio.sleep(86400)
-        try: await verdict_msg.delete()
-        except: pass
+        try:
+            await verdict_msg.delete()
+        except:
+            pass
 
 class FormulaireButton(Button):
     def __init__(self):
@@ -252,13 +255,18 @@ class AdminToggleButton(Button):
                 "🚫 Administrateurs uniquement.", ephemeral=True
             )
         recrutement_status["active"] = not recrutement_status["active"]
-        # Passe guild pour inclure l'effectif
-        embed = build_recrutement_embed(interaction.guild)
+        embed = build_recrutement_embed()
         await interaction.message.edit(embed=embed, view=RecrutementView())
         await interaction.response.send_message(
             f"🔄 Recrutement {('ON' if recrutement_status['active'] else 'OFF')}",
             ephemeral=True
         )
+
+class RecrutementView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(FormulaireButton())
+        self.add_item(AdminToggleButton())
 
 class Recrutement(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -278,8 +286,7 @@ class Recrutement(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def recrutement(self, ctx: commands.Context):
         await ctx.message.delete()
-        embed = build_recrutement_embed(ctx.guild)
-        await ctx.send(embed=embed, view=RecrutementView())
+        await ctx.send(embed=build_recrutement_embed(), view=RecrutementView())
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Recrutement(bot))
