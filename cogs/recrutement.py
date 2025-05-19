@@ -22,6 +22,7 @@ def load_votes():
         return {}
 
 def save_votes(data):
+    os.makedirs(os.path.dirname(VOTE_FILE), exist_ok=True)
     with open(VOTE_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -50,6 +51,7 @@ def build_recrutement_embed() -> Embed:
         description=description,
         color=couleur
     )
+
 class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     nom_rp = TextInput(label="Nom RP", placeholder="Ex: Akira le Flamme")
     age    = TextInput(label="Âge",    placeholder="Ex: 17 ans")
@@ -58,25 +60,44 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
     aura   = TextInput(label="Aura",   placeholder="Ex: Fort / Moyen / Faible")
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Compter le nombre de votants possibles (membres avec le rôle recruteur)
+        guild = interaction.guild
+        role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
+        total_votants = len(role.members) if role else 0
+
+        # Construire la description de l'embed avec le candidat et le nombre de votants
+        desc = (
+            f"👤 **Candidat :** {interaction.user.mention}\n\n"
+            f"> **Votants possibles :** {total_votants}"
+        )
         embed = Embed(
             title="📋 Nouvelle Candidature",
-            description=f"👤 **Candidat :** {interaction.user.mention}",
+            description=desc,
             color=0x2f3136
         )
+
+        # Ajouter les champs du formulaire
         for name, field in [
             ("Nom RP", self.nom_rp), ("Âge", self.age),
             ("Fruit", self.fruit), ("Niveau", self.niveau),
             ("Aura", self.aura)
         ]:
             embed.add_field(name=name, value=field.value, inline=False)
+
         embed.set_footer(text="Votes : ✅ 0 | ❌ 0")
 
+        # Envoyer l'embed et initialiser les votes
         msg = await interaction.channel.send(
             content=f"<@&{RECRUTEUR_ROLE_ID}>",
             embed=embed
         )
-        vote_data[str(msg.id)] = {}
+        # On stocke à la fois le candidat et le mapping des votes
+        vote_data[str(msg.id)] = {
+            "candidate": interaction.user.id,
+            "votes": {}
+        }
         save_votes(vote_data)
+
         await msg.edit(view=VoteView())
         await interaction.response.send_message(
             "✅ Candidature envoyée !", ephemeral=True
@@ -95,15 +116,22 @@ class VoteView(View):
         await self._vote(interaction, "contre")
 
     async def _vote(self, interaction: discord.Interaction, choix: str):
+        # Vérifier rôle recruteur
         if RECRUTEUR_ROLE_ID not in [r.id for r in interaction.user.roles]:
             return await interaction.response.send_message(
                 "🚫 Seuls les recruteurs peuvent voter.", ephemeral=True
             )
 
         mid = str(interaction.message.id)
-        uid = str(interaction.user.id)
-        votes = vote_data.setdefault(mid, {})
+        data = vote_data.get(mid)
+        if data is None:
+            # Message non géré
+            return await interaction.response.defer()
 
+        votes = data.setdefault("votes", {})
+        uid = str(interaction.user.id)
+
+        # Toggle vote
         if votes.get(uid) == choix:
             del votes[uid]
         else:
@@ -111,13 +139,48 @@ class VoteView(View):
 
         save_votes(vote_data)
 
-        embed = interaction.message.embeds[0]
+        # Recalcul des scores
         p = sum(1 for v in votes.values() if v == "pour")
         c = sum(1 for v in votes.values() if v == "contre")
+
+        # Mettre à jour l'embed
+        embed = interaction.message.embeds[0]
         embed.color = 0x00ff00 if p > c else 0xff0000 if c > p else 0x2f3136
         embed.set_footer(text=f"Votes : ✅ {p} | ❌ {c}")
-
         await interaction.message.edit(embed=embed, view=self)
+
+        # Vérifier si majorité atteinte
+        guild = interaction.guild
+        role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
+        total_votants = len(role.members) if role else 0
+        half = total_votants / 2
+
+        if p > half or c > half:
+            # Désactiver les boutons
+            for child in self.children:
+                child.disabled = True
+            await interaction.message.edit(view=self)
+
+            # Déterminer résultat
+            accepted = (p > half)
+            candidate_id = data.get("candidate")
+            # Notifier le candidat en DM
+            try:
+                member = guild.get_member(candidate_id)
+                user = member or await interaction.client.fetch_user(candidate_id)
+                result_text = "ACCEPTÉE 🎉" if accepted else "REFUSÉE ❌"
+                await user.send(
+                    f"Bonjour, votre candidature sur **{guild.name}** a été **{result_text}**."
+                )
+            except Exception:
+                pass  # Silencie les erreurs de DM
+
+            # Envoyer un message dans le canal pour les recruteurs
+            outcome = "acceptée 🎉" if accepted else "refusée ❌"
+            await interaction.channel.send(
+                f"📢 La candidature de <@{candidate_id}> a été **{outcome}**."
+            )
+
         await interaction.response.defer()
 
 class FormulaireButton(Button):
@@ -150,7 +213,6 @@ class AdminToggleButton(Button):
             )
 
         recrutement_status["active"] = not recrutement_status["active"]
-        # On reconstruit l'embed complet
         embed = build_recrutement_embed()
         await interaction.message.edit(embed=embed, view=RecrutementView())
         await interaction.response.send_message(
