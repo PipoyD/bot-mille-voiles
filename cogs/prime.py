@@ -5,7 +5,6 @@ import aiohttp
 import discord
 import unicodedata
 from discord.ext import commands
-from bs4 import BeautifulSoup
 
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
 
@@ -31,16 +30,14 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    # Unicode NFD, minuscules, on retire les diacritiques, puis on garde lettres/chiffres/espaces
     txt = unicodedata.normalize("NFD", text).lower()
     txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", txt)
 
 def name_matches(dname: str, entry: str) -> bool:
-    """Vrai si tous les tokens de dname sont dans entry."""
     dn = normalize(dname).split()
-    en = normalize(entry)
-    return all(token in en.split() for token in dn)
+    en = normalize(entry).split()
+    return all(token in en for token in dn)
 
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -51,36 +48,36 @@ class Prime(commands.Cog):
     async def prime(self, ctx: commands.Context):
         loading = await ctx.send("⏳ Récupération des primes…")
 
-        # 1) On va chercher la page
+        # 1) On récupère le HTML brut
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
 
-        # 2) On extrait Nom – Prime avec BeautifulSoup + regex
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text("\n")
-        matches = re.findall(r"([^\-\n\r]+?)\s*-\s*([\d,]+)\s*B", text)
-        # primes_raw : {Nom brut : montant int}
-        primes_raw = {name.strip(): int(amount.replace(",", "")) for name, amount in matches}
-
-        # 3) Pour faciliter la recherche, on garde la liste des noms bruts
+        # 2) On extrait directement Nom – Prime via regex
+        #    pattern : "Quelque Chose - 12,345,678 B"
+        matches = re.findall(r"([^\-\n\r<>]+?)\s*-\s*([\d,]+)\s*B", html)
+        primes_raw = {
+            name.strip(): int(amount.replace(",", ""))
+            for name, amount in matches
+        }
         entries = list(primes_raw.keys())
 
-        # 4) Construction de l'embed
+        # 3) Construction de l'embed
         embed = discord.Embed(
             title=f"• Équipage : {ctx.guild.name} • ⚓",
             color=0x1abc9c
         )
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+        if ctx.guild.icon:
+            embed.set_thumbnail(url=ctx.guild.icon.url)
 
-        # Effectif total = tous les membres qui matchent au moins un nom de prime
-        total = 0
-        for m in ctx.guild.members:
-            if any(name_matches(m.display_name, e) for e in entries):
-                total += 1
+        # Effectif total
+        total = sum(
+            1 for m in ctx.guild.members
+            if any(name_matches(m.display_name, e) for e in entries)
+        )
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
-        # 5) Pour chaque rôle
+        # 4) Par rôle
         for icon, role_name in ROLE_ORDER:
             role = discord.utils.get(ctx.guild.roles, name=role_name)
             if not role:
@@ -91,7 +88,6 @@ class Prime(commands.Cog):
                 for e in entries:
                     if name_matches(m.display_name, e):
                         montant = primes_raw[e]
-                        # classification
                         if montant >= QUOTAS["Puissant"]:
                             cat = "Puissant"
                         elif montant >= QUOTAS["Fort"]:
@@ -101,17 +97,13 @@ class Prime(commands.Cog):
                         grp.append((m, montant, EMOJI_FORCE[cat]))
                         break
 
-            # tri décroissant
             grp.sort(key=lambda x: x[1], reverse=True)
 
-            if not grp:
-                value = "N/A"
-            else:
-                lines = [
-                    f"- {m.mention} – 💰 `{montant:,} B` – {emoji}"
-                    for m, montant, emoji in grp
-                ]
+            if grp:
+                lines = [f"- {m.mention} – 💰 `{val:,} B` – {emoji}" for m, val, emoji in grp]
                 value = "\n".join(lines)
+            else:
+                value = "N/A"
 
             embed.add_field(name=f"{icon} :", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
