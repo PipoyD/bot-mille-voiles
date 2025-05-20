@@ -31,12 +31,12 @@ ROLE_ORDER = [
 
 # Flotte → emoji
 FLEET_EMOJIS = {
-    1371942480316203018: "<:2meflotte:1372158586951696455>",
-    1371942559894736916: "<:1reflotte:1372158546531324004>",
+    1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
+    1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
 }
 
 # Classification
-QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
+QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 0}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
 
 def normalize(text: str) -> str:
@@ -62,7 +62,6 @@ class Prime(commands.Cog):
         self.pool = None
 
     async def cog_load(self):
-        # Initialise le pool et la table
         self.pool = await asyncpg.create_pool(self.db_url)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -76,7 +75,6 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        # Scrape et upsert en base
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
@@ -100,9 +98,9 @@ class Prime(commands.Cog):
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
-        rows = await self.get_all_primes()
+        rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
-        entries = list(primes_raw.keys())
+        entries    = list(primes_raw.keys())
 
         embed = discord.Embed(
             title=f"• Équipage : {guild.name} • ⚓",
@@ -111,13 +109,12 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        total = sum(
-            1 for m in guild.members
-            if any(name_matches(m.display_name, e) for e in entries)
-        )
+        # Effectif total = nombre de membres avec le rôle "MEMBRE"
+        membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
+        total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
-        displayed = set()
+        displayed      = set()
         classification = {"Puissant": [], "Fort": [], "Faible": []}
 
         for role_id, emoji_role, label in ROLE_ORDER:
@@ -152,7 +149,7 @@ class Prime(commands.Cog):
         # Classification globale
         lines = []
         for cat in ("Puissant", "Fort", "Faible"):
-            em = EMOJI_FORCE[cat]
+            em       = EMOJI_FORCE[cat]
             mentions = " ".join(classification[cat]) or "N/A"
             lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
         embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
@@ -168,7 +165,7 @@ class Prime(commands.Cog):
         await self.fetch_and_upsert()
         embed = await self.build_embed(ctx.guild)
         await loading.delete()
-        # envoi avec bouton Actualiser
+
         view = self.RefreshView(self)
         await ctx.send(embed=embed, view=view)
 
@@ -183,7 +180,7 @@ class Prime(commands.Cog):
                 return await interaction.response.send_message(
                     "🚫 Réservé aux administrateurs.", ephemeral=True
                 )
-            await interaction.response.defer()  # acknowledge immediately
+            await interaction.response.defer()
             await self.cog.fetch_and_upsert()
             new_embed = await self.cog.build_embed(interaction.guild)
             await interaction.message.edit(embed=new_embed, view=self)
