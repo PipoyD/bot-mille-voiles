@@ -8,13 +8,24 @@ from discord.ext import commands
 
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
 
-# Ordre et noms des rôles
+# On reprend la même table de rôles que ton cog flotte.py
+ROLE_IDS = {
+    "CAPITAINE":       1317851007358734396,
+    "VICE_CAPITAINE":  1358079100203569152,
+    "COMMANDANT":      1358031308542181382,
+    "VICE_COMMANDANT": 1358032259596288093,
+    "LIEUTENANT":      1358030829225381908,
+    "MEMBRE":          1317850709948891177,
+}
+
+# Ordre d’affichage (id, icône, label)
 ROLE_ORDER = [
-    ("👑 Capitaine",       "Capitaine"),
-    ("⚔️ Vice-Capitaine",  "Vice-Capitaine"),
-    ("🛡️ Commandant",     "Commandant"),
-    ("🎖️ Lieutenant",     "Lieutenant"),
-    ("⚓ Membre d’équipage","Membre d’équipage"),
+    (ROLE_IDS["CAPITAINE"],       "👑", "Capitaine"),
+    (ROLE_IDS["VICE_CAPITAINE"],  "⚔️", "Vice-Capitaine"),
+    (ROLE_IDS["COMMANDANT"],      "🛡️", "Commandant"),
+    (ROLE_IDS["VICE_COMMANDANT"], "🗡️", "Vice-Commandant"),
+    (ROLE_IDS["LIEUTENANT"],      "🎖️", "Lieutenant"),
+    (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
 # Seuils de classification
@@ -37,7 +48,7 @@ def normalize(text: str) -> str:
 def name_matches(dname: str, entry: str) -> bool:
     dn = normalize(dname).split()
     en = normalize(entry).split()
-    return all(token in en for token in dn)
+    return all(tok in en for tok in dn)
 
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -48,21 +59,17 @@ class Prime(commands.Cog):
     async def prime(self, ctx: commands.Context):
         loading = await ctx.send("⏳ Récupération des primes…")
 
-        # 1) On récupère le HTML brut
+        # 1) fetch brut HTML
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
 
-        # 2) On extrait directement Nom – Prime via regex
-        #    pattern : "Quelque Chose - 12,345,678 B"
+        # 2) regex "Nom - 12,345,678 B"
         matches = re.findall(r"([^\-\n\r<>]+?)\s*-\s*([\d,]+)\s*B", html)
-        primes_raw = {
-            name.strip(): int(amount.replace(",", ""))
-            for name, amount in matches
-        }
+        primes_raw = {n.strip(): int(a.replace(",", "")) for n, a in matches}
         entries = list(primes_raw.keys())
 
-        # 3) Construction de l'embed
+        # 3) construction de l'embed
         embed = discord.Embed(
             title=f"• Équipage : {ctx.guild.name} • ⚓",
             color=0x1abc9c
@@ -70,16 +77,16 @@ class Prime(commands.Cog):
         if ctx.guild.icon:
             embed.set_thumbnail(url=ctx.guild.icon.url)
 
-        # Effectif total
+        # total des membres qui ont une prime
         total = sum(
             1 for m in ctx.guild.members
             if any(name_matches(m.display_name, e) for e in entries)
         )
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
-        # 4) Par rôle
-        for icon, role_name in ROLE_ORDER:
-            role = discord.utils.get(ctx.guild.roles, name=role_name)
+        # 4) par rôle (ID)
+        for role_id, emoji, label in ROLE_ORDER:
+            role = ctx.guild.get_role(role_id)
             if not role:
                 continue
 
@@ -87,25 +94,27 @@ class Prime(commands.Cog):
             for m in role.members:
                 for e in entries:
                     if name_matches(m.display_name, e):
-                        montant = primes_raw[e]
-                        if montant >= QUOTAS["Puissant"]:
+                        val = primes_raw[e]
+                        if val >= QUOTAS["Puissant"]:
                             cat = "Puissant"
-                        elif montant >= QUOTAS["Fort"]:
+                        elif val >= QUOTAS["Fort"]:
                             cat = "Fort"
                         else:
                             cat = "Faible"
-                        grp.append((m, montant, EMOJI_FORCE[cat]))
+                        grp.append((m, val, EMOJI_FORCE[cat]))
                         break
 
             grp.sort(key=lambda x: x[1], reverse=True)
-
             if grp:
-                lines = [f"- {m.mention} – 💰 `{val:,} B` – {emoji}" for m, val, emoji in grp]
+                lines = [
+                    f"- {m.mention} – 💰 `{val:,} B` – {emoji}"
+                    for m, val, emoji in grp
+                ]
                 value = "\n".join(lines)
             else:
                 value = "N/A"
 
-            embed.add_field(name=f"{icon} :", value=value, inline=False)
+            embed.add_field(name=f"{emoji} {label} :", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
         await loading.delete()
