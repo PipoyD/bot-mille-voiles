@@ -11,28 +11,40 @@ from discord import Embed
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
-VOTE_FILE           = "data/votes.json"
-RECRUTEUR_ROLE_ID   = 1317850709948891177
-VOTE_CHANNEL_ID     = 1371557531373277376
-LOG_CHANNEL_ID      = 1374033665482428558
+VOTE_FILE             = "data/votes.json"
+REC_MSG_FILE          = "data/recrutement_msg.json"
+RECRUTEUR_ROLE_ID     = 1317850709948891177
+VOTE_CHANNEL_ID       = 1371557531373277376
+LOG_CHANNEL_ID        = 1374033665482428558
 
-def load_votes():
+# Rôles à donner en cas d'acceptation
+ACCEPT_ROLES = [
+    1368976467442274496,
+    1317850709948891177,
+    1371950984057589780
+]
+
+def load_json(path):
     try:
-        with open(VOTE_FILE, "r") as f:
+        with open(path, "r") as f:
             return json.load(f) or {}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-def save_votes(data):
-    os.makedirs(os.path.dirname(VOTE_FILE), exist_ok=True)
-    with open(VOTE_FILE, "w") as f:
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-vote_data = load_votes()
+vote_data        = load_json(VOTE_FILE)
+recrutement_msg  = load_json(REC_MSG_FILE)
 recrutement_status = {"active": True}
 
+def save_recr_message(guild_id, channel_id, message_id):
+    recrutement_msg[str(guild_id)] = {"channel": channel_id, "message": message_id}
+    save_json(REC_MSG_FILE, recrutement_msg)
+
 def build_recrutement_embed(guild: discord.Guild) -> Embed:
-    # Compte les membres ayant le rôle recruteur
     role = guild.get_role(RECRUTEUR_ROLE_ID)
     effectif = len(role.members) if role else 0
 
@@ -72,7 +84,6 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
         role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
         total_votants = len(role.members) if role else 0
 
-        # Construction et envoi de l'embed de candidature
         desc = (
             f"👤 **Candidat :** {interaction.user.mention}\n\n"
             f"> **Votants possibles :** {total_votants}"
@@ -98,11 +109,11 @@ class RecrutementModal(Modal, title="Formulaire de Recrutement"):
             "candidate": interaction.user.id,
             "votes": {}
         }
-        save_votes(vote_data)
+        save_json(VOTE_FILE, vote_data)
         await msg.edit(view=VoteView())
         await interaction.response.send_message("✅ Candidature envoyée !", ephemeral=True)
 
-        # Log nouvelle candidature
+        # log nouvelle candidature
         log_chan = interaction.client.get_channel(LOG_CHANNEL_ID)
         if log_chan:
             log = Embed(
@@ -131,7 +142,6 @@ class VoteView(View):
         await self._vote(interaction, "contre")
 
     async def _vote(self, interaction: discord.Interaction, choix: str):
-        # Vérification du rôle recruteur
         if RECRUTEUR_ROLE_ID not in [r.id for r in interaction.user.roles]:
             return await interaction.response.send_message(
                 "🚫 Seuls les recruteurs peuvent voter.", ephemeral=True
@@ -144,31 +154,26 @@ class VoteView(View):
 
         votes = data.setdefault("votes", {})
         uid = str(interaction.user.id)
-        # Toggle vote
         if votes.get(uid) == choix:
             del votes[uid]
         else:
             votes[uid] = choix
-        save_votes(vote_data)
+        save_json(VOTE_FILE, vote_data)
 
-        # Recalcul des scores
         p = sum(1 for v in votes.values() if v == "pour")
         c = sum(1 for v in votes.values() if v == "contre")
 
-        # Mise à jour de l'embed
         embed = interaction.message.embeds[0]
         embed.color = 0x00ff00 if p > c else 0xff0000 if c > p else 0x2f3136
         embed.set_footer(text=f"Votes : ✅ {p} | ❌ {c}")
         await interaction.message.edit(embed=embed, view=self)
 
-        # Vérification de la majorité
         guild = interaction.guild
         role = guild.get_role(RECRUTEUR_ROLE_ID) if guild else None
         total_votants = len(role.members) if role else 0
         half = total_votants / 2
 
         if p > half or c > half:
-            # Désactivation des boutons
             for child in self.children:
                 child.disabled = True
             await interaction.message.edit(view=self)
@@ -176,6 +181,17 @@ class VoteView(View):
             accepted = (p > half)
             candidate_id = data["candidate"]
             result_text = "ACCEPTÉE 🎉" if accepted else "REFUSÉE ❌"
+
+            # attribution des rôles si accepté
+            if accepted:
+                member = guild.get_member(candidate_id)
+                if member:
+                    roles = [guild.get_role(rid) for rid in ACCEPT_ROLES]
+                    roles = [r for r in roles if r is not None]
+                    try:
+                        await member.add_roles(*roles, reason="Candidature acceptée")
+                    except discord.Forbidden:
+                        pass
 
             # DM du candidat
             try:
@@ -193,7 +209,7 @@ class VoteView(View):
                 f"📢 La candidature de <@{candidate_id}> a été **{outcome}**."
             )
 
-            # Log verdict
+            # log verdict
             log_chan = interaction.client.get_channel(LOG_CHANNEL_ID)
             if log_chan:
                 log = Embed(
@@ -207,7 +223,6 @@ class VoteView(View):
                 log.add_field(name="Résultat", value=result_text, inline=True)
                 await log_chan.send(embed=log)
 
-            # Planifier suppressions (24h puis 48h)
             asyncio.create_task(
                 self._schedule_deletions(interaction.message, verdict_msg)
             )
@@ -215,12 +230,12 @@ class VoteView(View):
         await interaction.response.defer()
 
     async def _schedule_deletions(self, embed_msg: discord.Message, verdict_msg: discord.Message):
-        await asyncio.sleep(86400)   # 24h
+        await asyncio.sleep(86400)
         try:
             await embed_msg.delete()
         except:
             pass
-        await asyncio.sleep(86400)   # +24h = 48h
+        await asyncio.sleep(86400)
         try:
             await verdict_msg.delete()
         except:
@@ -254,9 +269,7 @@ class AdminToggleButton(Button):
             return await interaction.response.send_message(
                 "🚫 Administrateurs uniquement.", ephemeral=True
             )
-        # Bascule ON/OFF
         recrutement_status["active"] = not recrutement_status["active"]
-        # Reconstruit l'embed avec effectif à jour
         embed = build_recrutement_embed(interaction.guild)
         await interaction.message.edit(embed=embed, view=RecrutementView())
         await interaction.response.send_message(
@@ -284,12 +297,30 @@ class Recrutement(commands.Cog):
                 if msg.embeds[0].title == "📋 Nouvelle Candidature":
                     await msg.edit(view=VoteView())
 
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        had = any(r.id == RECRUTEUR_ROLE_ID for r in before.roles)
+        has = any(r.id == RECRUTEUR_ROLE_ID for r in after.roles)
+        if had == has:
+            return
+
+        data = recrutement_msg.get(str(after.guild.id))
+        if not data:
+            return
+        try:
+            chan = await self.bot.fetch_channel(data["channel"])
+            msg  = await chan.fetch_message(data["message"])
+            await msg.edit(embed=build_recrutement_embed(after.guild))
+        except:
+            pass
+
     @commands.command(name="recrutement")
     @commands.has_permissions(administrator=True)
     async def recrutement(self, ctx: commands.Context):
         await ctx.message.delete()
         embed = build_recrutement_embed(ctx.guild)
-        await ctx.send(embed=embed, view=RecrutementView())
+        msg = await ctx.send(embed=embed, view=RecrutementView())
+        save_recr_message(ctx.guild.id, msg.channel.id, msg.id)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Recrutement(bot))
