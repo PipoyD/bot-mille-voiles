@@ -86,8 +86,8 @@ class RpNameOnJoin(commands.Cog):
         view = self._build_join_view(member.id)
         try:
             await channel.send(
-                f"🎉 Bienvenue {member.mention} !\n"
-                "Clique sur le bouton ci-dessous pour choisir ton **Nom RP**.",
+                f"🎉 Bienvenue {member.mention} !\n\n"
+                "Pour accéder au reste du serveur Discord, clique sur le bouton ci-dessous et définis ton **Nom RP**.",
                 view=view
             )
         except discord.Forbidden:
