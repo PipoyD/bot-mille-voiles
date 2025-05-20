@@ -34,7 +34,7 @@ FLEET_EMOJIS = {
 }
 
 # Seuils de classification et emojis
-QUOTAS = {"Puissant": 50_000_000, "Fort": 10_000_000, "Faible": 1_000_000}
+QUOTAS = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
 
 def normalize(text: str) -> str:
