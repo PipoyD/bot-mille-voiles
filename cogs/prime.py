@@ -29,14 +29,14 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
-# Flotte → emoji
+# Flotte → emoji (correctement associées)
 FLEET_EMOJIS = {
     1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
     1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
 }
 
-# Classification
-QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 0}
+# Seuils de classification et emojis
+QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
 
 def normalize(text: str) -> str:
@@ -60,8 +60,11 @@ class Prime(commands.Cog):
         self.bot = bot
         self.db_url = os.getenv("DATABASE_URL")
         self.pool = None
+        # Enregistre la vue persistante pour le bouton Actualiser
+        bot.add_view(self.RefreshView(self))
 
     async def cog_load(self):
+        # Initialise le pool Postgres et crée la table primes si nécessaire
         self.pool = await asyncpg.create_pool(self.db_url)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -75,6 +78,7 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
+        # Récupère le HTML et upsert les primes
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
@@ -117,6 +121,7 @@ class Prime(commands.Cog):
         displayed      = set()
         classification = {"Puissant": [], "Fort": [], "Faible": []}
 
+        # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -159,15 +164,13 @@ class Prime(commands.Cog):
     @commands.command(name="prime")
     @commands.has_permissions(administrator=True)
     async def prime(self, ctx: commands.Context):
-        """Met à jour la DB puis affiche les primes (admin only)."""
+        """!prime — met à jour la DB puis affiche l’embed avec bouton Actualiser."""
         await ctx.message.delete()
         loading = await ctx.send("⏳ Mise à jour des primes…")
         await self.fetch_and_upsert()
         embed = await self.build_embed(ctx.guild)
         await loading.delete()
-
-        view = self.RefreshView(self)
-        await ctx.send(embed=embed, view=view)
+        await ctx.send(embed=embed, view=self.RefreshView(self))
 
     class RefreshView(View):
         def __init__(self, cog: "Prime"):
