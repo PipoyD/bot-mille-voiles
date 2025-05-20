@@ -6,7 +6,7 @@ from discord.ext import commands
 from datetime import datetime, timezone
 
 # Remplace par l'ID de ton canal de logs
-ROLE_LOG_CHANNEL_ID = 123456789012345678  
+ROLE_LOG_CHANNEL_ID = 1374439655415611393 
 
 class RoleLogger(commands.Cog):
     def __init__(self, bot: commands.Bot):
