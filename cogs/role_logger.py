@@ -1,12 +1,10 @@
 # cogs/role_logger.py
 
 import discord
-from discord import Embed
 from discord.ext import commands
-from datetime import datetime, timezone
 
 # Remplace par l'ID de ton canal de logs
-ROLE_LOG_CHANNEL_ID = 1374439655415611393 
+ROLE_LOG_CHANNEL_ID = 1374439655415611393
 
 class RoleLogger(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -33,41 +31,22 @@ class RoleLogger(commands.Cog):
         executor = None
         async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.member_role_update):
             if entry.target.id == after.id:
-                # On prend la première entrée correspondante
                 executor = entry.user
                 break
 
-        # 3️⃣ Pour chaque rôle ajouté, envoie un embed "Ajout"
+        # 3️⃣ Pour chaque rôle ajouté, envoie un message simple
         for role in added_roles:
-            embed = Embed(
-                title="🔧 Rôle ajouté",
-                color=0x00ff00,
-                timestamp=datetime.now(timezone.utc)
+            author = executor.mention if executor else "Inconnu"
+            await log_chan.send(
+                f"🔧 Rôle **{role.name}** ajouté à {after.mention} par {author}"
             )
-            embed.add_field(name="Membre",        value=f"{after.mention} (`{after.id}`)", inline=False)
-            embed.add_field(name="Rôle ajouté",   value=f"{role.name} (`{role.id}`)", inline=False)
-            embed.add_field(
-                name="Par", 
-                value=f"{executor.mention if executor else 'Inconnu'} (`{getattr(executor,'id','')}`)",
-                inline=False
-            )
-            await log_chan.send(embed=embed)
 
-        # 4️⃣ Pour chaque rôle retiré, envoie un embed "Retrait"
+        # 4️⃣ Pour chaque rôle retiré, envoie un message simple
         for role in removed_roles:
-            embed = Embed(
-                title="🚫 Rôle retiré",
-                color=0xff0000,
-                timestamp=datetime.now(timezone.utc)
+            author = executor.mention if executor else "Inconnu"
+            await log_chan.send(
+                f"🚫 Rôle **{role.name}** retiré à {after.mention} par {author}"
             )
-            embed.add_field(name="Membre",        value=f"{after.mention} (`{after.id}`)", inline=False)
-            embed.add_field(name="Rôle retiré",   value=f"{role.name} (`{role.id}`)", inline=False)
-            embed.add_field(
-                name="Par", 
-                value=f"{executor.mention if executor else 'Inconnu'} (`{getattr(executor,'id','')}`)",
-                inline=False
-            )
-            await log_chan.send(embed=embed)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(RoleLogger(bot))
