@@ -1,14 +1,16 @@
 # cogs/prime.py
 
+import os
 import re
 import aiohttp
-import discord
 import unicodedata
+import asyncpg
+import discord
 from discord.ext import commands
 
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
 
-# Les rôles et leur ordre d'affichage
+# Hiérarchie des rôles & icônes
 ROLE_IDS = {
     "CAPITAINE":       1317851007358734396,
     "VICE_CAPITAINE":  1358079100203569152,
@@ -17,7 +19,6 @@ ROLE_IDS = {
     "LIEUTENANT":      1358030829225381908,
     "MEMBRE":          1317850709948891177,
 }
-
 ROLE_ORDER = [
     (ROLE_IDS["CAPITAINE"],       "👑", "Capitaine"),
     (ROLE_IDS["VICE_CAPITAINE"],  "⚔️", "Vice-Capitaine"),
@@ -27,14 +28,14 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
-# Rôles de flotte → emoji à afficher
+# Flotte → emoji
 FLEET_EMOJIS = {
-    1371942480316203018: "<:2meflotte:1372158586951696455>",  # Écarlate
-    1371942559894736916: "<:1reflotte:1372158546531324004>",  # Azur
+    1371942480316203018: "<:2meflotte:1372158586951696455>",
+    1371942559894736916: "<:1reflotte:1372158546531324004>",
 }
 
-# Seuils de classification et emojis
-QUOTAS = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
+# Classification
+QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
 
 def normalize(text: str) -> str:
@@ -48,51 +49,78 @@ def name_matches(dname: str, entry: str) -> bool:
     return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
-    for role in member.roles:
-        if role.id in FLEET_EMOJIS:
-            return FLEET_EMOJIS[role.id]
-    return ""  # pas de flotte
+    for r in member.roles:
+        if r.id in FLEET_EMOJIS:
+            return FLEET_EMOJIS[r.id]
+    return ""
 
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.db_url = os.getenv("DATABASE_URL")
+        self.pool = None
 
-    @commands.command(name="prime")
-    @commands.has_permissions(administrator=True)
-    async def prime(self, ctx: commands.Context):
-        loading = await ctx.send("⏳ Récupération des primes…")
+    async def cog_load(self):
+        # Initialise le pool et la table
+        self.pool = await asyncpg.create_pool(self.db_url)
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS primes (
+                    name TEXT PRIMARY KEY,
+                    bounty BIGINT
+                )
+            """)
 
-        # 1) Fetch brut HTML
+    async def cog_unload(self):
+        await self.pool.close()
+
+    async def fetch_and_upsert(self):
+        # Scrape et upsert en base
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
 
-        # 2) Extraction Nom – Prime via regex
         matches = re.findall(r"([^\-\n\r<>]+?)\s*-\s*([\d,]+)\s*B", html)
-        primes_raw = {n.strip(): int(a.replace(",", "")) for n, a in matches}
+        data = [(n.strip(), int(a.replace(",", ""))) for n, a in matches]
+
+        async with self.pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO primes(name, bounty)
+                VALUES($1, $2)
+                ON CONFLICT (name) DO UPDATE
+                  SET bounty = EXCLUDED.bounty
+                """,
+                data
+            )
+
+    async def get_all_primes(self):
+        async with self.pool.acquire() as conn:
+            return await conn.fetch("SELECT name, bounty FROM primes")
+
+    async def build_embed(self, guild: discord.Guild) -> discord.Embed:
+        rows = await self.get_all_primes()
+        primes_raw = {r["name"]: r["bounty"] for r in rows}
         entries = list(primes_raw.keys())
 
-        # 3) Préparation de l'embed
         embed = discord.Embed(
-            title=f"• Équipage : {ctx.guild.name} • ⚓",
+            title=f"• Équipage : {guild.name} • ⚓",
             color=0x1abc9c
         )
-        if ctx.guild.icon:
-            embed.set_thumbnail(url=ctx.guild.icon.url)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
 
-        # Effectif total
         total = sum(
-            1 for m in ctx.guild.members
+            1 for m in guild.members
             if any(name_matches(m.display_name, e) for e in entries)
         )
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
-        # 4) Parcours par rôle + classification
         displayed = set()
         classification = {"Puissant": [], "Fort": [], "Faible": []}
 
         for role_id, emoji_role, label in ROLE_ORDER:
-            role = ctx.guild.get_role(role_id)
+            role = guild.get_role(role_id)
             if not role:
                 continue
 
@@ -103,32 +131,24 @@ class Prime(commands.Cog):
                 for e in entries:
                     if name_matches(m.display_name, e):
                         val = primes_raw[e]
-                        if val >= QUOTAS["Puissant"]:
-                            cat = "Puissant"
-                        elif val >= QUOTAS["Fort"]:
-                            cat = "Fort"
-                        else:
-                            cat = "Faible"
-                        fleet_emoji = get_fleet_emoji(m)
-                        grp.append((fleet_emoji, m, val, EMOJI_FORCE[cat]))
-                        classification[cat].append(f"{fleet_emoji}{m.mention}")
+                        cat = ("Puissant" if val >= QUOTAS["Puissant"]
+                               else "Fort" if val >= QUOTAS["Fort"]
+                               else "Faible")
+                        fleet = get_fleet_emoji(m)
+                        grp.append((fleet, m, val, EMOJI_FORCE[cat]))
+                        classification[cat].append(f"{fleet}{m.mention}")
                         displayed.add(m.id)
                         break
 
             grp.sort(key=lambda x: x[2], reverse=True)
-            if grp:
-                lines = [
-                    f"- {fleet}{member.mention} – 💰 `{val:,} B` – {force}"
-                    for fleet, member, val, force in grp
-                ]
-                value = "\n".join(lines)
-            else:
-                value = "N/A"
-
+            value = "\n".join(
+                f"- {fleet}{member.mention} – 💰 `{val:,} B` – {force}"
+                for fleet, member, val, force in grp
+            ) or "N/A"
             embed.add_field(name=f"{emoji_role} {label} :", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        # 5) Champ de classification globale
+        # Classification globale
         lines = []
         for cat in ("Puissant", "Fort", "Faible"):
             em = EMOJI_FORCE[cat]
@@ -136,7 +156,16 @@ class Prime(commands.Cog):
             lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
         embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
 
-        # 6) Envoi
+        return embed
+
+    @commands.command(name="prime")
+    @commands.has_permissions(administrator=True)
+    async def prime(self, ctx: commands.Context):
+        """Met à jour la DB puis affiche les primes (admin only)."""
+        await ctx.message.delete()
+        loading = await ctx.send("⏳ Mise à jour des primes…")
+        await self.fetch_and_upsert()
+        embed = await self.build_embed(ctx.guild)
         await loading.delete()
         await ctx.send(embed=embed)
 
