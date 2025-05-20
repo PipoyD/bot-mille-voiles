@@ -7,6 +7,7 @@ import unicodedata
 import asyncpg
 import discord
 from discord.ext import commands
+from discord.ui import View, Button
 
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
 
@@ -167,7 +168,26 @@ class Prime(commands.Cog):
         await self.fetch_and_upsert()
         embed = await self.build_embed(ctx.guild)
         await loading.delete()
-        await ctx.send(embed=embed)
+        # envoi avec bouton Actualiser
+        view = self.RefreshView(self)
+        await ctx.send(embed=embed, view=view)
+
+    class RefreshView(View):
+        def __init__(self, cog: "Prime"):
+            super().__init__(timeout=None)
+            self.cog = cog
+
+        @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
+        async def refresh(self, interaction: discord.Interaction, button: Button):
+            if not interaction.user.guild_permissions.administrator:
+                return await interaction.response.send_message(
+                    "🚫 Réservé aux administrateurs.", ephemeral=True
+                )
+            await interaction.response.defer()  # acknowledge immediately
+            await self.cog.fetch_and_upsert()
+            new_embed = await self.cog.build_embed(interaction.guild)
+            await interaction.message.edit(embed=new_embed, view=self)
+            await interaction.followup.send("✅ Primes actualisées.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Prime(bot))
