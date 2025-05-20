@@ -29,7 +29,7 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
-# Flotte → emoji
+# Flotte → emoji (correctement associées)
 FLEET_EMOJIS = {
     1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
     1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
@@ -60,11 +60,11 @@ class Prime(commands.Cog):
         self.bot    = bot
         self.db_url = os.getenv("DATABASE_URL")
         self.pool   = None
-        # enregistre la vue persistante pour 🔁 Actualiser
+        # Enregistre la vue persistante pour le bouton Actualiser
         bot.add_view(self.RefreshView(self))
 
     async def cog_load(self):
-        # crée le pool et la table
+        # Initialise le pool Postgres et crée la table primes si nécessaire
         self.pool = await asyncpg.create_pool(self.db_url)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -78,6 +78,7 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
+        # Récupère le HTML et upsert les primes
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
@@ -101,12 +102,12 @@ class Prime(commands.Cog):
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        # Parcours les entrées pour trouver celle qui match le pseudo
+        """Retourne le tuple (entry_name, bounty) ou (None, None)."""
         rows = await self.get_all_primes()
         for r in rows:
             if name_matches(display_name, r["name"]):
-                return r["bounty"]
-        return None
+                return r["name"], r["bounty"]
+        return None, None
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
         rows       = await self.get_all_primes()
@@ -128,6 +129,7 @@ class Prime(commands.Cog):
         displayed      = set()
         classification = {"Puissant": [], "Fort": [], "Faible": []}
 
+        # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -181,12 +183,16 @@ class Prime(commands.Cog):
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
     async def prime_user(self, ctx: commands.Context):
-        """!prime — affiche votre prime (recruteurs)."""
+        """!prime — affiche votre prime + votre Nom RP."""
         await ctx.message.delete()
-        bounty = await self.find_prime_for(ctx.author.display_name)
+        entry, bounty = await self.find_prime_for(ctx.author.display_name)
         if bounty is None:
             return await ctx.send("❌ Prime introuvable pour votre Nom RP.", ephemeral=True)
-        await ctx.send(f"💰 Votre prime : `{bounty:,} B`", ephemeral=True)
+        await ctx.send(
+            f"📜 **Nom RP :** {entry}\n"
+            f"💰 **Prime :** `{bounty:,} B`",
+            ephemeral=True
+        )
 
     class RefreshView(View):
         def __init__(self, cog: "Prime"):
