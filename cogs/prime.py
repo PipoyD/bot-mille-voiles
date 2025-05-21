@@ -261,5 +261,14 @@ class Prime(commands.Cog):
                 return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
             await interaction.response.send_modal(SlugModal(self.cog, interaction.message))
 
+    @commands.command(name="clearprimes")
+    @commands.has_permissions(administrator=True)
+    async def clear_primes(self, ctx: commands.Context):
+        """Vide entièrement la table primes."""
+        await ctx.message.delete()
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM primes")
+        await ctx.send("✅ La table `primes` a été vidée.", delete_after=5)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(Prime(bot))
