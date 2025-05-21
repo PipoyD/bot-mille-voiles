@@ -11,7 +11,7 @@ from discord.ui import View, Button, Modal, TextInput
 
 BASE_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel"
 
-# Hiérarchie des rôles & icônes
+# IDs des rôles
 ROLE_IDS = {
     "CAPITAINE":       1317851007358734396,
     "VICE_CAPITAINE":  1358079100203569152,
@@ -20,6 +20,8 @@ ROLE_IDS = {
     "LIEUTENANT":      1358030829225381908,
     "MEMBRE":          1317850709948891177,
 }
+
+# Ordre d'affichage par rôle
 ROLE_ORDER = [
     (ROLE_IDS["CAPITAINE"],       "👑", "Capitaine"),
     (ROLE_IDS["VICE_CAPITAINE"],  "⚔️", "Vice-Capitaine"),
@@ -35,7 +37,7 @@ FLEET_EMOJIS = {
     1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
 }
 
-# Classification
+# Classification d'aura (utile pour embelir)
 QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
 
@@ -66,11 +68,8 @@ class SuffixModal(Modal, title="Mise à jour de l'URL de primes"):
     async def on_submit(self, interaction: discord.Interaction):
         new_suffix = self.suffix.value.strip()
         self.cog.prime_url = f"{BASE_URL}/{new_suffix}"
-        # 1) scrape & upsert
         await self.cog.fetch_and_upsert()
-        # 2) rebuild embed
         new_embed = await self.cog.build_embed(interaction.guild)
-        # 3) edit original message
         await self.prime_message.edit(embed=new_embed, view=self.cog.RefreshView(self.cog, self.prime_message))
         await interaction.response.send_message("✅ URL mise à jour et primes actualisées !", ephemeral=True)
 
@@ -79,8 +78,9 @@ class Prime(commands.Cog):
         self.bot       = bot
         self.db_url    = os.getenv("DATABASE_URL")
         self.pool      = None
-        self.prime_url = BASE_URL  # définit après saisie suffixe
-        bot.add_view(self.RefreshView(self, None))  # vue persistante
+        self.prime_url = BASE_URL
+        # Enregistrement de la vue persistante
+        bot.add_view(self.RefreshView(self, None))
 
     async def cog_load(self):
         self.pool = await asyncpg.create_pool(self.db_url)
@@ -96,6 +96,9 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
+        # On réinitialise la table avant d'upsert pour éviter les restes
+        async with self.pool.acquire() as conn:
+            await conn.execute("TRUNCATE primes")
         async with aiohttp.ClientSession() as sess:
             async with sess.get(self.prime_url) as resp:
                 html = await resp.text()
@@ -105,7 +108,7 @@ class Prime(commands.Cog):
             await conn.executemany(
                 """
                 INSERT INTO primes(name, bounty)
-                  VALUES($1,$2)
+                VALUES($1,$2)
                 ON CONFLICT(name) DO UPDATE SET bounty = EXCLUDED.bounty
                 """,
                 data
@@ -113,7 +116,14 @@ class Prime(commands.Cog):
 
     async def get_all_primes(self):
         async with self.pool.acquire() as conn:
-            return await conn.fetch("SELECT name,bounty FROM primes")
+            return await conn.fetch("SELECT name, bounty FROM primes")
+
+    async def find_prime_for(self, display_name: str):
+        rows = await self.get_all_primes()
+        for r in rows:
+            if name_matches(display_name, r["name"]):
+                return r["name"], r["bounty"]
+        return None, None
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
         rows       = await self.get_all_primes()
@@ -127,7 +137,6 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        # Effectif total = membres avec rôle MEMBRE
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
@@ -153,14 +162,17 @@ class Prime(commands.Cog):
                         displayed.add(m.id)
                         break
             grp.sort(key=lambda x:x[2], reverse=True)
-            value = "\n".join(f"- {fleet}{mem.mention} – 💰 `{v:,} B` – {f}"
-                              for fleet,mem,v,f in grp) or "N/A"
+            value = "\n".join(
+                f"- {fleet}{mem.mention} – 💰 `{v:,} B` – {f}"
+                for fleet,mem,v,f in grp
+            ) or "N/A"
             embed.add_field(name=f"{emoji_role} {label} :", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        lines=[]
+        lines = []
         for cat in ("Puissant","Fort","Faible"):
-            em=EMOJI_FORCE[cat]; mns=" ".join(classification[cat]) or "N/A"
+            em = EMOJI_FORCE[cat]
+            mns = " ".join(classification[cat]) or "N/A"
             lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mns}")
         embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
 
@@ -169,24 +181,36 @@ class Prime(commands.Cog):
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — initialise l'embed + bouton Actualiser."""
+        """!primes — affiche l’embed et bouton Actualiser."""
         await ctx.message.delete()
-        # On force la saisie du suffixe si non encore défini
         if self.prime_url == BASE_URL:
-            loading = await ctx.send("🔗 Veuillez entrer la fin de l'URL…")
+            prompt = await ctx.send("🔗 Configurez d'abord la fin de l'URL via le bouton 🔁.")
             view = self.RefreshView(self, None)
-            msg = await ctx.send("Cliquez sur 🔁 pour configurer l'URL.", view=view)
+            msg = await ctx.send("Cliquez sur 🔁 pour configurer l'URL des primes.", view=view)
             view.prime_message = msg
-            await loading.delete()
             return
 
-        loading = await ctx.send("⏳ Mise à jour des primes…")
+        loading = await ctx.send("⏳ Chargement des primes…")
         await self.fetch_and_upsert()
         embed = await self.build_embed(ctx.guild)
         await loading.delete()
         view = self.RefreshView(self, None)
         msg = await ctx.send(embed=embed, view=view)
         view.prime_message = msg
+
+    @commands.command(name="prime")
+    @commands.has_role(ROLE_IDS["MEMBRE"])
+    async def prime_user(self, ctx: commands.Context):
+        """!prime — affiche votre prime personnelle."""
+        await ctx.message.delete()
+        entry, bounty = await self.find_prime_for(ctx.author.display_name)
+        if bounty is None:
+            return await ctx.send("❌ Prime introuvable pour votre Nom RP.", ephemeral=True)
+        await ctx.send(
+            f"📜 **Nom RP :** {entry}\n"
+            f"💰 **Prime :** `{bounty:,} B`",
+            ephemeral=True
+        )
 
     class RefreshView(View):
         def __init__(self, cog: "Prime", prime_message: discord.Message):
@@ -197,17 +221,13 @@ class Prime(commands.Cog):
         @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message("🚫 Admin only", ephemeral=True)
+                return await interaction.response.send_message("🚫 Admins only", ephemeral=True)
             if self.cog.prime_url == BASE_URL:
-                # pas encore configuré : ouvrir modal
-                modal = SuffixModal(self.cog, interaction.message)
-                return await interaction.response.send_modal(modal)
-
-            # sinon : simple mise à jour
+                return await interaction.response.send_modal(SuffixModal(self.cog, interaction.message))
             await interaction.response.defer()
             await self.cog.fetch_and_upsert()
             new_embed = await self.cog.build_embed(interaction.guild)
-            await interaction.message.edit(embed=new_embed, view=self)
+            await self.prime_message.edit(embed=new_embed, view=self)
             await interaction.followup.send("✅ Primes actualisées.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
