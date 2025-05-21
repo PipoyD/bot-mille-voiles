@@ -9,7 +9,8 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
-DEFAULT_PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
+# Préfixe fixe de l'URL GitBook
+URL_PREFIX = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/"
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
@@ -69,36 +70,35 @@ def get_fleet_emoji(member: discord.Member) -> str:
             return FLEET_EMOJIS[r.id]
     return ""
 
-class URLModal(Modal):
-    url = TextInput(
-        label="URL de la page primes",
-        placeholder="https://…",
+class SlugModal(Modal):
+    slug = TextInput(
+        label="Identifiant de la page primes (slug)",
+        placeholder="gvednstndtrsdd",
         style=discord.TextStyle.short,
-        required=True
+        required=True,
     )
 
     def __init__(self, cog: "Prime", message: discord.Message):
-        super().__init__(title="Actualiser Primes")
+        super().__init__(title="Actualiser les primes")
         self.cog = cog
         self.message = message
 
     async def on_submit(self, interaction: discord.Interaction):
-        new_url = self.url.value.strip()
-        self.cog.current_url = new_url
+        slug = self.slug.value.strip()
+        url = URL_PREFIX + slug
         try:
-            await self.cog.fetch_and_upsert(new_url)
-            new_embed = await self.cog.build_embed(interaction.guild)
-            await self.message.edit(embed=new_embed, view=self.cog.RefreshView(self.cog))
-            await interaction.response.send_message("✅ Primes actualisées depuis l’URL fournie.", ephemeral=True)
+            await self.cog.fetch_and_upsert(url)
+            embed = await self.cog.build_embed(interaction.guild)
+            await self.message.edit(embed=embed, view=self.cog.RefreshView(self.cog))
+            await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Échec mise à jour : {e}", ephemeral=True)
 
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot        = bot
-        self.db_url     = os.getenv("DATABASE_URL")
-        self.pool       = None
-        self.current_url = DEFAULT_PRIME_URL
+        self.bot    = bot
+        self.db_url = os.getenv("DATABASE_URL")
+        self.pool   = None
         bot.add_view(self.RefreshView(self))
 
     async def cog_load(self):
@@ -114,13 +114,13 @@ class Prime(commands.Cog):
     async def cog_unload(self):
         await self.pool.close()
 
-    async def fetch_and_upsert(self, url: str = None):
-        target = url or self.current_url
+    async def fetch_and_upsert(self, url: str):
+        """Scrape la page GitBook à l'URL donnée, upserte les primes."""
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
-            async with sess.get(target) as resp:
+            async with sess.get(url) as resp:
                 if resp.status != 200:
-                    raise RuntimeError(f"HTTP {resp.status} sur {target}")
+                    raise RuntimeError(f"HTTP {resp.status} pour {url}")
                 html = await resp.text()
 
         pattern = re.compile(r"([^\-<>\r\n]+?)\s*[–-]\s*([\d,]+)\s*B")
@@ -134,8 +134,7 @@ class Prime(commands.Cog):
                 """
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
-                ON CONFLICT(name) DO UPDATE
-                  SET bounty = EXCLUDED.bounty
+                ON CONFLICT(name) DO UPDATE SET bounty = EXCLUDED.bounty
                 """,
                 data
             )
@@ -205,33 +204,26 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label}", value=text, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        synth = []
+        lines = []
         for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
             mentions = " ".join(classification[cat]) or "N/A"
-            synth.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
-        embed.add_field(name="📊 Classification Globale", value="\n".join(synth), inline=False)
+            lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
+        embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
 
         return embed
 
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — met à jour la DB puis affiche l’embed avec bouton Actualiser."""
+        """!primes — lance une première mise à jour en demandant d’abord le slug."""
         await ctx.message.delete()
-        loading = await ctx.send("⏳ Mise à jour des primes…")
-        try:
-            await self.fetch_and_upsert()
-            embed = await self.build_embed(ctx.guild)
-            await loading.delete()
-            await ctx.send(embed=embed, view=self.RefreshView(self))
-        except Exception as e:
-            await loading.edit(content=f"❌ Échec mise à jour : {e}")
+        msg = await ctx.send("🔗 Entrez l’identifiant (slug) de la page primes :", view=self.RefreshView(self))
+        # Le RefreshView ouvre directement le modal ; on affiche juste ce message
 
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
     async def prime_user(self, ctx: commands.Context):
-        """!prime — affiche votre prime + votre Nom RP."""
         await ctx.message.delete()
         entry, bounty = await self.find_prime_for(ctx.author.display_name)
         if bounty is None:
@@ -250,11 +242,8 @@ class Prime(commands.Cog):
         @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message(
-                    "🚫 Réservé aux administrateurs.", ephemeral=True
-                )
-            # Ouvre la modal pour demander l’URL
-            await interaction.response.send_modal(URLModal(self.cog, interaction.message))
+                return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
+            await interaction.response.send_modal(SlugModal(self.cog, interaction.message))
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Prime(bot))
