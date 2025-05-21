@@ -55,19 +55,19 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    """NFD + casefold → retire accents, met en minuscules, ne garde que a-z0-9 et espace."""
+    """NFD + casefold → retire accents, met en minuscules, ne garde que a-z0-9 et espaces."""
     nfkd = unicodedata.normalize("NFD", text).casefold()
     stripped = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", stripped)
 
 def name_matches(dname: str, entry: str) -> bool:
-    """Vérifie que chaque mot de dname apparaît dans entry après normalisation."""
+    """Chaque mot de dname doit apparaître dans entry après normalisation."""
     dn = normalize(dname).split()
     en = normalize(entry).split()
     return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
-    """Retourne l'emoji de flotte si le membre a l'un des rôles de flotte."""
+    """Retourne l'emoji de flotte s'il y a un rôle de flotte."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
@@ -90,13 +90,13 @@ class SlugModal(Modal):
         slug = self.slug.value.strip()
         url  = URL_PREFIX + slug
         try:
-            # Mise à jour de la base
+            # 1) Mise à jour DB
             await self.cog.fetch_and_upsert(url)
-            # Construction des deux embeds
+            # 2) Construction des embeds
             roles_embed, classif_embed = await self.cog.build_all_embeds(interaction.guild)
-            # Édition du message initial (embed rôles seul, plus de view)
+            # 3) Édition du message initial : embed rôles seul, plus de view
             await self.message.edit(content=None, embed=roles_embed, view=None)
-            # Envoi du embed classification avec le bouton Actualiser
+            # 4) Envoi du second message : classification + bouton Actualiser
             await self.message.channel.send(embed=classif_embed, view=self.cog.RefreshView(self.cog))
             await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
         except Exception as e:
@@ -123,7 +123,7 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self, url: str):
-        """Scrape l’URL donnée, extrait les primes, et upserte en base."""
+        """Scrape l’URL, extrait les primes, upserte la base."""
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
             async with sess.get(url) as resp:
@@ -206,15 +206,28 @@ class Prime(commands.Cog):
         return embed
 
     async def build_classification_embed(self, guild: discord.Guild) -> discord.Embed:
-        """Embed de la classification globale, triée et chunkée par catégorie."""
-        rows = await self.get_all_primes()
+        """Embed de la classification GLOBALE, **uniquement pour les membres d’équipage**."""
+        rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
-        # trier entrées par prime décroissante
+        # Trie par prime décroissante
         sorted_entries = sorted(primes_raw.items(), key=lambda kv: kv[1], reverse=True)
 
-        # remplir classification dans le bon ordre
+        # Filtrer les membres d’équipage
+        crew_members = [
+            m for m in guild.members
+            if any(r.id in ROLE_IDS.values() for r in m.roles)
+        ]
+
+        # Remplir classification dans l’ordre décroissant
         classification = {cat: [] for cat in QUOTAS}
         for entry, bounty in sorted_entries:
+            member_obj = discord.utils.find(
+                lambda m: name_matches(m.display_name, entry),
+                crew_members
+            )
+            if not member_obj:
+                continue
+            # Catégorie
             if bounty >= QUOTAS["Très Dangereux"]:
                 cat = "Très Dangereux"
             elif bounty >= QUOTAS["Dangereux"]:
@@ -228,21 +241,15 @@ class Prime(commands.Cog):
             else:
                 cat = "Faible"
 
-            # cherche le member correspondant
-            member_obj = discord.utils.find(
-                lambda m: name_matches(m.display_name, entry),
-                guild.members
-            )
-            if member_obj:
-                mention = f"{get_fleet_emoji(member_obj)}{member_obj.mention}"
-                classification[cat].append(mention)
+            mention = f"{get_fleet_emoji(member_obj)}{member_obj.mention}"
+            classification[cat].append(mention)
 
         embed = discord.Embed(
             title=f"📊 Classification Globale – {guild.name}",
             color=0x1abc9c
         )
 
-        # un field par catégorie non vide, chunké en 10 mentions max
+        # Un field par catégorie non vide, chunké par 10 pour respecter la limite
         for cat, mentions in classification.items():
             if not mentions:
                 continue
@@ -257,7 +264,7 @@ class Prime(commands.Cog):
         return embed
 
     async def build_all_embeds(self, guild: discord.Guild):
-        """Retourne [roles_embed, classification_embed]."""
+        """Retourne la paire [embed_roles, embed_classification]."""
         return [
             await self.build_roles_embed(guild),
             await self.build_classification_embed(guild)
@@ -266,7 +273,7 @@ class Prime(commands.Cog):
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — affiche le bouton Actualiser pour démarrer."""
+        """!primes — fait apparaître le bouton Actualiser pour démarrer."""
         await ctx.message.delete()
         await ctx.send(
             "Cliquez sur « 🔁 Actualiser » pour saisir l’identifiant de la page primes.",
