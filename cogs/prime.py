@@ -18,7 +18,7 @@ ROLE_IDS = {
     "VICE_CAPITAINE":  1358079100203569152,
     "COMMANDANT":      1358031308542181382,
     "VICE_COMMANDANT": 1358032259596288093,
-    "LIEUTENANT":      1358031308542181382,
+    "LIEUTENANT":      1358030829225381908,
     "MEMBRE":          1317850709948891177,
 }
 ROLE_ORDER = [
@@ -55,19 +55,16 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    """Normalize pour insensible à la casse et aux accents."""
     nfkd = unicodedata.normalize("NFD", text).casefold()
     stripped = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", stripped)
 
 def name_matches(dname: str, entry: str) -> bool:
-    """Chaque mot de display_name doit apparaître dans entry normalisé."""
     dn = normalize(dname).split()
     en = normalize(entry).split()
     return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
-    """Retourne l'emoji de flotte si le membre a un rôle de flotte."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
@@ -91,15 +88,15 @@ class SlugModal(Modal):
         slug = self.slug.value.strip()
         url  = URL_PREFIX + slug
         try:
-            # 1) Met à jour la base
+            # 1) Met à jour la base de données
             await self.cog.fetch_and_upsert(url)
             # 2) Reconstruit les deux embeds
-            new_roles     = await self.cog.build_roles_embed(interaction.guild)
-            new_classif   = await self.cog.build_classification_embed(interaction.guild)
-            # 3) Modifie les messages existants sans les supprimer
+            new_roles   = await self.cog.build_roles_embed(interaction.guild)
+            new_classif = await self.cog.build_classification_embed(interaction.guild)
+            # 3) Édite les deux messages en place
             await self.roles_msg.edit(embed=new_roles)
             await self.classif_msg.edit(embed=new_classif, view=self.cog.RefreshView(self.cog, self.roles_msg, self.classif_msg))
-            # 4) Confirme
+            # 4) Feedback à l'admin
             await interaction.response.send_message("✅ Primes et classification actualisées.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Échec mise à jour : {e}", ephemeral=True)
@@ -148,7 +145,15 @@ class Prime(commands.Cog):
         async with self.pool.acquire() as conn:
             return await conn.fetch("SELECT name, bounty FROM primes")
 
+    async def find_prime_for(self, display_name: str):
+        best = (None, -1)
+        for r in await self.get_all_primes():
+            if name_matches(display_name, r["name"]) and r["bounty"] > best[1]:
+                best = (r["name"], r["bounty"])
+        return best if best[0] else (None, None)
+
     async def build_roles_embed(self, guild: discord.Guild) -> discord.Embed:
+        """Embed détaillant les primes par rôle, trié par prime décroissante."""
         rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
         entries    = sorted(primes_raw, key=lambda k: primes_raw[k], reverse=True)
@@ -161,8 +166,8 @@ class Prime(commands.Cog):
             embed.set_thumbnail(url=guild.icon.url)
 
         displayed = set()
-        def safe(text: str) -> str:
-            return text if len(text) <= 1024 else text[:1020] + "…"
+        def safe(t: str) -> str:
+            return t if len(t) <= 1024 else t[:1020] + "…"
 
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
@@ -188,23 +193,23 @@ class Prime(commands.Cog):
                             cat = "Fort"
                         else:
                             cat = "Faible"
-                        mention = f"{get_fleet_emoji(m)}{m.mention}"
+                        mention   = f"{get_fleet_emoji(m)}{m.mention}"
                         force_txt = f"{EMOJI_FORCE[cat]} {cat}"
                         grp.append((bounty, mention, force_txt))
                         displayed.add(m.id)
                         break
 
             grp.sort(key=lambda x: x[0], reverse=True)
-            lines = [f"- {mention} – 💰 `{bounty:,} B` – *{force}*"
-                     for bounty, mention, force in grp]
+            lines = [f"- {mn} – 💰 `{b:,} B` – *{ft}*"
+                     for b, mn, ft in grp]
             txt = "\n".join(lines) or "N/A"
-
             embed.add_field(name=f"{emoji_role} {label}", value=safe(txt), inline=False)
             embed.add_field(name="\u200b", value="—", inline=False)
 
         return embed
 
     async def build_classification_embed(self, guild: discord.Guild) -> discord.Embed:
+        """Embed de la classification globale, uniquement pour les membres d’équipage."""
         rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
         sorted_entries = sorted(primes_raw.items(), key=lambda kv: kv[1], reverse=True)
@@ -237,7 +242,7 @@ class Prime(commands.Cog):
             if not mentions:
                 continue
             for i in range(0, len(mentions), 10):
-                chunk = mentions[i:i+10]
+                chunk = mentions[i : i + 10]
                 embed.add_field(
                     name=f"{EMOJI_FORCE[cat]} {cat} ({len(mentions)})",
                     value=" ".join(chunk),
@@ -253,15 +258,15 @@ class Prime(commands.Cog):
         roles_embed   = await self.build_roles_embed(ctx.guild)
         classif_embed = await self.build_classification_embed(ctx.guild)
 
-        roles_msg  = await ctx.send(embed=roles_embed)
-        view       = self.RefreshView(self, roles_msg, None)
+        roles_msg   = await ctx.send(embed=roles_embed)
+        view        = self.RefreshView(self, roles_msg, None)
         classif_msg = await ctx.send(embed=classif_embed, view=view)
-        view.classif_msg = classif_msg  # complète la référence à classif_msg dans la view
+        view.classif_msg = classif_msg  # lie la view au message de classification
 
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
     async def prime_user(self, ctx: commands.Context):
-        """!prime — affiche votre prime et nom RP."""
+        """!prime — affiche votre prime et votre nom RP."""
         await ctx.message.delete()
         name, bounty = await self.find_prime_for(ctx.author.display_name)
         if bounty is None:
@@ -288,7 +293,6 @@ class Prime(commands.Cog):
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
-            # ouvre le modal en passant les deux messages pour modification
             await interaction.response.send_modal(SlugModal(self.cog, self.roles_msg, self.classif_msg))
 
 async def setup(bot: commands.Bot):
