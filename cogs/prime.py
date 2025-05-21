@@ -6,10 +6,12 @@ import aiohttp
 import unicodedata
 import asyncpg
 import discord
+from bs4 import BeautifulSoup
 from discord.ext import commands
 from discord.ui import View, Button
 
-PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
+# On pointe vers la version “print” pour avoir le HTML statique
+PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd/print.html"
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
@@ -29,14 +31,14 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
-# Flotte → emoji (correctement associées)
+# Flotte → emoji
 FLEET_EMOJIS = {
-    1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
-    1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
+    1371942480316203018: "<:1reflotte:1372158546531324004>",
+    1371942559894736916: "<:2meflotte:1372158586951696455>",
 }
 
 # Seuils de classification et emojis
-QUOTAS      = {
+QUOTAS = {
     "Très Dangereux": 1_150_000_000,
     "Dangereux":       300_000_000,
     "Très Puissant":   150_000_000,
@@ -90,23 +92,38 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
+        # 1) Récupère le HTML “print” statique
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
 
-        matches = re.findall(r"([^\-\n\r<>]+?)\s*-\s*([\d,]+)\s*B", html)
-        data = [(n.strip(), int(a.replace(",", ""))) for n, a in matches]
+        # 2) Parse avec BS pour ne récupérer que la <ul> sous "Liste des Primes"
+        soup = BeautifulSoup(html, "html.parser")
+        header = soup.find(lambda tag: tag.name in ("h2","h3") and "Liste des Primes" in tag.text)
+        if not header:
+            raise RuntimeError("Impossible de trouver le titre 'Liste des Primes' dans le HTML")
+        ul = header.find_next_sibling("ul")
+        if not ul:
+            raise RuntimeError("Impossible de trouver la liste <ul> après le titre")
 
+        data = []
+        for li in ul.find_all("li"):
+            text = li.get_text(strip=True)
+            if "–" not in text:
+                continue
+            name_part, bounty_part = map(str.strip, text.split("–", 1))
+            # retire le "B" et les virgules
+            bounty = int(bounty_part.rstrip("B").replace(",", "").strip())
+            data.append((name_part, bounty))
+
+        # 3) Upsert en base, sans jamais supprimer quoi que ce soit
         async with self.pool.acquire() as conn:
-            await conn.executemany(
-                """
+            await conn.executemany("""
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
                 ON CONFLICT (name) DO UPDATE
                   SET bounty = EXCLUDED.bounty
-                """,
-                data
-            )
+            """, data)
 
     async def get_all_primes(self):
         async with self.pool.acquire() as conn:
@@ -131,13 +148,15 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
+        # Effectif total
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
         displayed      = set()
-        classification = {cat: [] for cat in EMOJI_FORCE.keys()}
+        classification = {cat: [] for cat in EMOJI_FORCE}
 
+        # Par rôle dans l’ordre
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -150,12 +169,20 @@ class Prime(commands.Cog):
                 for e in entries:
                     if name_matches(m.display_name, e):
                         val = primes_raw[e]
-                        cat = ("Très Dangereux" if val >= QUOTAS["Très Dangereux"]
-                               else "Dangereux" if val >= QUOTAS["Dangereux"]
-                               else "Très Puissant" if val >= QUOTAS["Très Puissant"]
-                               else "Puissant" if val >= QUOTAS["Puissant"]
-                               else "Fort" if val >= QUOTAS["Fort"]
-                               else "Faible")
+                        # déterminer la catégorie
+                        if val >= QUOTAS["Très Dangereux"]:
+                            cat = "Très Dangereux"
+                        elif val >= QUOTAS["Dangereux"]:
+                            cat = "Dangereux"
+                        elif val >= QUOTAS["Très Puissant"]:
+                            cat = "Très Puissant"
+                        elif val >= QUOTAS["Puissant"]:
+                            cat = "Puissant"
+                        elif val >= QUOTAS["Fort"]:
+                            cat = "Fort"
+                        else:
+                            cat = "Faible"
+
                         fleet = get_fleet_emoji(m)
                         grp.append((fleet, m, val, EMOJI_FORCE[cat]))
                         classification[cat].append(f"{fleet}{m.mention}")
@@ -170,11 +197,12 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label}", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
+        # Classification globale (uniquement 3 catégories de synthèse)
         lines = []
-        for cat in ("Puissant", "Fort", "Faible"):
+        for cat in ("Très Dangereux","Dangereux","Très Puissant","Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
             mentions = " ".join(classification[cat]) or "N/A"
-            lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
+            lines.append(f"**{em}** ({len(classification[cat])}) : {mentions}")
         embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
 
         return embed
@@ -209,12 +237,18 @@ class Prime(commands.Cog):
             super().__init__(timeout=None)
             self.cog = cog
 
-        @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
+        @discord.ui.button(
+            label="🔁 Actualiser",
+            style=discord.ButtonStyle.secondary,
+            custom_id="refresh_primes"
+        )
         async def refresh(self, interaction: discord.Interaction, button: Button):
+            # Vérif admin
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message(
                     "🚫 Réservé aux administrateurs.", ephemeral=True
                 )
+
             await interaction.response.defer()
             await self.cog.fetch_and_upsert()
             new_embed = await self.cog.build_embed(interaction.guild)
