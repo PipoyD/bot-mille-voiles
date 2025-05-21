@@ -11,7 +11,7 @@ from discord.ui import View, Button
 
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
 
-# ─ IDs des rôles et ordre d'affichage ────────────────────────────────────────
+# ─ IDs des rôles & ordre d'affichage ─────────────────────────────────────────
 ROLE_IDS = {
     "CAPITAINE":       1317851007358734396,
     "VICE_CAPITAINE":  1358079100203569152,
@@ -29,17 +29,17 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
-# ─ Emojis de flotte ───────────────────────────────────────────────────────
+# ─ Emojis de flotte ────────────────────────────────────────────────────────
 FLEET_EMOJIS = {
     1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
     1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
 }
 
-# ─ Seuils d’aura + emojis ──────────────────────────────────────────────────
+# ─ Seuils d’aura + emojis ───────────────────────────────────────────────────
 QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
 
-# ─ Définition des rangs et seuils ─────────────────────────────────────────
+# ─ Rangs & seuils ──────────────────────────────────────────────────────────
 RANKS = [
     ("Empereur Pirate Menace extrême",   3_200_000_000),
     ("SuperNova Très Dangereux",         1_150_000_000),
@@ -92,7 +92,7 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        # récupère et upsert
+        # Scraping & upsert
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
@@ -127,15 +127,15 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        # ─ Effectif total ──────────────────────────────────────────────
+        # ─ Effectif total ────────────────────────────────────────────
         mr = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(mr.members) if mr else 0
-        embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
+        embed.add_field("Effectif total", f"{total} membres", inline=False)
 
         displayed      = set()
         classification = {"Puissant": [], "Fort": [], "Faible": []}
 
-        # ─ Par rôle ─────────────────────────────────────────────────────
+        # ─ Par rôle ───────────────────────────────────────────────────
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -151,7 +151,7 @@ class Prime(commands.Cog):
                         aura = (
                             "Puissant" if bounty >= QUOTAS["Puissant"]
                             else "Fort"     if bounty >= QUOTAS["Fort"]
-                            else "Faible"
+                            else   "Faible"
                         )
                         lines.append(
                             f"- {get_fleet_emoji(m)}{m.mention} – 💰 `{bounty:,} B` – {EMOJI_FORCE[aura]}"
@@ -160,21 +160,16 @@ class Prime(commands.Cog):
                         displayed.add(m.id)
                         break
 
-            embed.add_field(
-                name=f"{emoji_role} {label}",
-                value="\n".join(lines) or "N/A",
-                inline=False
-            )
+            embed.add_field(f"{emoji_role} {label}", "\n".join(lines) or "N/A", inline=False)
 
-        # ─ Classification Globale (aura) ────────────────────────────────
+        # ─ Classification Globale ─────────────────────────────────────
         aura_lines = []
         for aura in ("Puissant", "Fort", "Faible"):
             lst = classification[aura] or ["N/A"]
             aura_lines.append(f"{EMOJI_FORCE[aura]} **{aura}** ({len(lst)}) : {' '.join(lst)}")
-        embed.add_field(name="📊 Classification Globale", value="\n".join(aura_lines), inline=False)
+        embed.add_field("📊 Classification Globale", "\n".join(aura_lines), inline=False)
 
-        # ─ Rangs & Auras ────────────────────────────────────────────────
-        # crée mapping member.id → bounty
+        # ─ Rangs & Auras ───────────────────────────────────────────────
         id_to_bounty = {}
         for m in guild.members:
             for e in entries:
@@ -192,11 +187,11 @@ class Prime(commands.Cog):
                     ranks_agg[rank_name].append(f"{get_fleet_emoji(m)}{m.mention}")
                     break
 
-        rank_lines = []
-        for rank_name, _ in RANKS:
-            lst = ranks_agg[rank_name] or ["N/A"]
-            rank_lines.append(f"**{rank_name}** ({len(lst)}) : {' '.join(lst)}")
-        embed.add_field(name="🏷️ Rangs & Auras", value="\n".join(rank_lines), inline=False)
+        rank_lines = [
+            f"**{rank_name}** ({len(ranks_agg[rank_name])}) : {' '.join(ranks_agg[rank_name]) or 'N/A'}"
+            for rank_name, _ in RANKS
+        ]
+        embed.add_field("🏷️ Rangs & Auras", "\n".join(rank_lines), inline=False)
 
         return embed
 
@@ -205,7 +200,10 @@ class Prime(commands.Cog):
     async def primes(self, ctx: commands.Context):
         """!primes — met à jour la DB puis affiche l’embed + bouton Actualiser."""
         await ctx.message.delete()
+        loading = await ctx.send("⏳ Mise à jour des primes…")
         await self.fetch_and_upsert()
+        await loading.delete()
+
         embed = await self.build_embed(ctx.guild)
         await ctx.send(embed=embed, view=self.RefreshView(self))
 
@@ -214,9 +212,16 @@ class Prime(commands.Cog):
     async def prime_user(self, ctx: commands.Context):
         """!prime — affiche votre Nom RP + votre prime."""
         await ctx.message.delete()
-        entry, bounty = await self.find_prime_for(ctx.author.display_name)
+        # récupère la prime pour le display_name
+        entry, bounty = None, None
+        for r in await self.get_all_primes():
+            if name_matches(ctx.author.display_name, r["name"]):
+                entry, bounty = r["name"], r["bounty"]
+                break
+
         if bounty is None:
             return await ctx.send("❌ Prime introuvable pour votre Nom RP.", ephemeral=True)
+
         await ctx.send(
             f"📜 **Nom RP :** {entry}\n"
             f"💰 **Prime :** `{bounty:,} B`",
@@ -232,11 +237,12 @@ class Prime(commands.Cog):
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("🚫 Admins only.", ephemeral=True)
-            # relance update + édite l'embed
             await interaction.response.defer()
+
             await self.cog.fetch_and_upsert()
             new_embed = await self.cog.build_embed(interaction.guild)
             await interaction.message.edit(embed=new_embed, view=self)
+
             await interaction.followup.send("✅ Primes actualisées.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
