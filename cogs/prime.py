@@ -54,19 +54,25 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    """Retire accents et caractères non alphanumériques pour comparaison."""
-    txt = unicodedata.normalize("NFD", text).lower()
+    """
+    Enlève les accents et passe en casefold (plus fort que lower),
+    puis filtre les caractères alphanumériques et espaces.
+    """
+    txt = unicodedata.normalize("NFD", text).casefold()
     txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", txt)
 
 def name_matches(dname: str, entry: str) -> bool:
-    """Vérifie que chaque mot du display_name est dans l'entry scrappé."""
-    dn = normalize(dname).split()
-    en = normalize(entry).split()
-    return all(tok in en for tok in dn)
+    """
+    Recherche insensible à la casse et aux accents :
+    chaque mot de dname doit apparaître dans entry.
+    """
+    dn_tokens = normalize(dname).split()
+    en_tokens = normalize(entry).split()
+    return all(tok in en_tokens for tok in dn_tokens)
 
 def get_fleet_emoji(member: discord.Member) -> str:
-    """Retourne l'emoji de flotte si le membre a un rôle de flotte."""
+    """Retourne l'emoji de flotte si le membre a le rôle approprié."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
@@ -93,46 +99,38 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        """Scrape la page GitBook et upserte toutes les primes en base."""
+        """Scrape la page et upserte toutes les primes sans supprimer quoi que ce soit."""
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
             async with sess.get(PRIME_URL) as resp:
                 if resp.status != 200:
-                    raise RuntimeError(f"HTTP {resp.status} en GET {PRIME_URL}")
+                    raise RuntimeError(f"HTTP {resp.status} pour {PRIME_URL}")
                 html = await resp.text()
 
-        # Trouve toutes les lignes "Nom – 1,234,567 B" ou "Nom - 1,234,567 B"
+        # Récupère toutes les lignes de type "Nom – 1,234,567 B"
         pattern = re.compile(r"([^\-<>\r\n]+?)\s*[–-]\s*([\d,]+)\s*B")
-        data = []
-        for name, bounty in pattern.findall(html):
-            clean_name   = name.strip()
-            clean_bounty = int(bounty.replace(",", ""))
-            data.append((clean_name, clean_bounty))
+        rows = pattern.findall(html)
+        if not rows:
+            raise RuntimeError("Aucune prime trouvée dans le HTML")
 
-        if not data:
-            raise RuntimeError("Aucune prime trouvée dans le HTML brut")
+        data = [(name.strip(), int(bounty.replace(",", ""))) for name, bounty in rows]
 
-        # Upsert
         async with self.pool.acquire() as conn:
-            await conn.executemany(
-                """
+            await conn.executemany("""
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
-                ON CONFLICT (name) DO UPDATE
+                ON CONFLICT(name) DO UPDATE
                   SET bounty = EXCLUDED.bounty
-                """,
-                data
-            )
+            """, data)
 
     async def get_all_primes(self):
         async with self.pool.acquire() as conn:
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        rows = await self.get_all_primes()
-        for r in rows:
-            if name_matches(display_name, r["name"]):
-                return r["name"], r["bounty"]
+        for record in await self.get_all_primes():
+            if name_matches(display_name, record["name"]):
+                return record["name"], record["bounty"]
         return None, None
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
@@ -155,12 +153,10 @@ class Prime(commands.Cog):
         displayed      = set()
         classification = {cat: [] for cat in EMOJI_FORCE}
 
-        # Parcours des rôles dans l'ordre
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
                 continue
-
             grp = []
             for m in role.members:
                 if m.id in displayed:
@@ -168,7 +164,7 @@ class Prime(commands.Cog):
                 for entry in entries:
                     if name_matches(m.display_name, entry):
                         val = primes_raw[entry]
-                        # Catégorie
+                        # Choix de la catégorie
                         if val >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif val >= QUOTAS["Dangereux"]:
@@ -189,20 +185,20 @@ class Prime(commands.Cog):
                         break
 
             grp.sort(key=lambda x: x[2], reverse=True)
-            value = "\n".join(
+            text = "\n".join(
                 f"- {fleet}{member.mention} – 💰 `{val:,} B` – *{force}*"
                 for fleet, member, val, force in grp
             ) or "N/A"
-            embed.add_field(name=f"{emoji_role} {label}", value=value, inline=False)
+            embed.add_field(name=f"{emoji_role} {label}", value=text, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        # Classification globale
-        lines = []
+        # Synthèse globale
+        synth = []
         for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
             mentions = " ".join(classification[cat]) or "N/A"
-            lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
-        embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
+            synth.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
+        embed.add_field(name="📊 Classification Globale", value="\n".join(synth), inline=False)
 
         return embed
 
