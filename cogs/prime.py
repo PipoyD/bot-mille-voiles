@@ -139,13 +139,11 @@ class Prime(commands.Cog):
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        best_name = None
-        best_bounty = -1
+        best = (None, -1)
         for r in await self.get_all_primes():
-            if name_matches(display_name, r["name"]) and r["bounty"] > best_bounty:
-                best_name = r["name"]
-                best_bounty = r["bounty"]
-        return (best_name, best_bounty) if best_name else (None, None)
+            if name_matches(display_name, r["name"]) and r["bounty"] > best[1]:
+                best = (r["name"], r["bounty"])
+        return best if best[0] else (None, None)
 
     async def build_roles_embed(self, guild: discord.Guild) -> discord.Embed:
         rows       = await self.get_all_primes()
@@ -174,7 +172,6 @@ class Prime(commands.Cog):
                 for entry in entries:
                     if name_matches(m.display_name, entry):
                         bounty = primes_raw[entry]
-                        # catégorie pour affichage
                         if bounty >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif bounty >= QUOTAS["Dangereux"]:
@@ -202,7 +199,10 @@ class Prime(commands.Cog):
         primes_raw = {r["name"]: r["bounty"] for r in rows}
         entries    = sorted(primes_raw.keys(), key=lambda k: primes_raw[k], reverse=True)
 
-        # collecte des mentions par catégorie
+        # Fonction safe pour tronquer
+        def safe(text: str) -> str:
+            return text if len(text) <= 1024 else text[:1020] + "…"
+
         classification = {cat: set() for cat in QUOTAS.keys()}
         for member in guild.members:
             for entry in entries:
@@ -237,24 +237,24 @@ class Prime(commands.Cog):
             mentions = sorted(classification[cat])
             if not mentions:
                 continue
-            count = len(mentions)
-            lines.append(f"{EMOJI_FORCE[cat]} **{cat}** ({count}) : {' '.join(mentions)}")
+            lines.append(f"{EMOJI_FORCE[cat]} **{cat}** ({len(mentions)}) : {' '.join(mentions)}")
 
         text = "\n".join(lines) or "Aucun membre listé"
-        embed.add_field(name="\u200b", value=text, inline=False)
+        embed.add_field(name="\u200b", value=safe(text), inline=False)
         return embed
 
     async def build_all_embeds(self, guild: discord.Guild):
-        e1 = await self.build_roles_embed(guild)
-        e2 = await self.build_classification_embed(guild)
-        return [e1, e2]
+        return [
+            await self.build_roles_embed(guild),
+            await self.build_classification_embed(guild)
+        ]
 
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
         await ctx.message.delete()
         await ctx.send(
-            "Cliquez sur « 🔁 Actualiser » pour saisir l’identifiant de la page primes.",
+            "Cliquez sur « 🔁 Actualiser » pour saisir le slug de la page primes.",
             view=self.RefreshView(self)
         )
 
@@ -275,7 +275,9 @@ class Prime(commands.Cog):
         @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
+                return await interaction.response.send_message(
+                    "🚫 Réservé aux administrateurs.", ephemeral=True
+                )
             await interaction.response.send_modal(SlugModal(self.cog, interaction.message))
 
     @commands.command(name="clearprimes")
