@@ -36,8 +36,22 @@ FLEET_EMOJIS = {
 }
 
 # Seuils de classification et emojis
-QUOTAS      = {"Très Dangereux": 1_150_000_000, "Dangereux": 300_000_000, "Très Puissant": 150_000_000, "Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 0}
-EMOJI_FORCE = {"Très Dangereux": "🏹 Très Dangereux","Dangereux": "🏹 Dangereux","Très Puissant": "🔥 Très Puissant","Puissant": "🔥 Puissant", "Fort": "⚔️ Fort", "Faible": "💀 Faible"}
+QUOTAS      = {
+    "Très Dangereux": 1_150_000_000,
+    "Dangereux":       300_000_000,
+    "Très Puissant":   150_000_000,
+    "Puissant":         30_000_000,
+    "Fort":              5_000_000,
+    "Faible":                   0,
+}
+EMOJI_FORCE = {
+    "Très Dangereux": "🏹 Très Dangereux",
+    "Dangereux":      "🏹 Dangereux",
+    "Très Puissant":  "🔥 Très Puissant",
+    "Puissant":       "🔥 Puissant",
+    "Fort":           "⚔️ Fort",
+    "Faible":         "💀 Faible",
+}
 
 def normalize(text: str) -> str:
     txt = unicodedata.normalize("NFD", text).lower()
@@ -60,11 +74,9 @@ class Prime(commands.Cog):
         self.bot    = bot
         self.db_url = os.getenv("DATABASE_URL")
         self.pool   = None
-        # Enregistre la vue persistante pour le bouton Actualiser
         bot.add_view(self.RefreshView(self))
 
     async def cog_load(self):
-        # Initialise le pool Postgres et crée la table primes si nécessaire
         self.pool = await asyncpg.create_pool(self.db_url)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -78,7 +90,6 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        # Récupère le HTML et upsert les primes
         async with aiohttp.ClientSession() as sess:
             async with sess.get(PRIME_URL) as resp:
                 html = await resp.text()
@@ -102,7 +113,6 @@ class Prime(commands.Cog):
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        """Retourne le tuple (entry_name, bounty) ou (None, None)."""
         rows = await self.get_all_primes()
         for r in rows:
             if name_matches(display_name, r["name"]):
@@ -121,15 +131,13 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        # Effectif total = nombre de membres avec le rôle "MEMBRE"
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
         displayed      = set()
-        classification = {"Très Dangereux": [],"Dangereux": [],"Très Puissant": [],"Puissant": [], "Fort": [], "Faible": []}
+        classification = {cat: [] for cat in EMOJI_FORCE.keys()}
 
-        # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -142,7 +150,10 @@ class Prime(commands.Cog):
                 for e in entries:
                     if name_matches(m.display_name, e):
                         val = primes_raw[e]
-                        cat = ("Puissant" if val >= QUOTAS["Puissant"]
+                        cat = ("Très Dangereux" if val >= QUOTAS["Très Dangereux"]
+                               else "Dangereux" if val >= QUOTAS["Dangereux"]
+                               else "Très Puissant" if val >= QUOTAS["Très Puissant"]
+                               else "Puissant" if val >= QUOTAS["Puissant"]
                                else "Fort" if val >= QUOTAS["Fort"]
                                else "Faible")
                         fleet = get_fleet_emoji(m)
@@ -156,10 +167,9 @@ class Prime(commands.Cog):
                 f"- {fleet}{member.mention} – 💰 `{val:,} B` – *{force}*"
                 for fleet, member, val, force in grp
             ) or "N/A"
-            embed.add_field(name=f"{emoji_role} {label} :", value=value, inline=False)
+            embed.add_field(name=f"{emoji_role} {label}", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        # Classification globale
         lines = []
         for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
