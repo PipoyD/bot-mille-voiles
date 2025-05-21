@@ -7,9 +7,9 @@ import aiohttp
 import asyncpg
 import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import View, Button, Modal, TextInput
 
-PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
+DEFAULT_PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
@@ -54,35 +54,51 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    """
-    Enlève les accents et passe en casefold (plus fort que lower),
-    puis filtre les caractères alphanumériques et espaces.
-    """
     txt = unicodedata.normalize("NFD", text).casefold()
     txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", txt)
 
 def name_matches(dname: str, entry: str) -> bool:
-    """
-    Recherche insensible à la casse et aux accents :
-    chaque mot de dname doit apparaître dans entry.
-    """
-    dn_tokens = normalize(dname).split()
-    en_tokens = normalize(entry).split()
-    return all(tok in en_tokens for tok in dn_tokens)
+    dn = normalize(dname).split()
+    en = normalize(entry).split()
+    return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
-    """Retourne l'emoji de flotte si le membre a le rôle approprié."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
     return ""
 
+class URLModal(Modal):
+    url = TextInput(
+        label="URL de la page primes",
+        placeholder="https://…",
+        style=discord.TextStyle.short,
+        required=True
+    )
+
+    def __init__(self, cog: "Prime", message: discord.Message):
+        super().__init__(title="Actualiser Primes")
+        self.cog = cog
+        self.message = message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_url = self.url.value.strip()
+        self.cog.current_url = new_url
+        try:
+            await self.cog.fetch_and_upsert(new_url)
+            new_embed = await self.cog.build_embed(interaction.guild)
+            await self.message.edit(embed=new_embed, view=self.cog.RefreshView(self.cog))
+            await interaction.response.send_message("✅ Primes actualisées depuis l’URL fournie.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Échec mise à jour : {e}", ephemeral=True)
+
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot    = bot
-        self.db_url = os.getenv("DATABASE_URL")
-        self.pool   = None
+        self.bot        = bot
+        self.db_url     = os.getenv("DATABASE_URL")
+        self.pool       = None
+        self.current_url = DEFAULT_PRIME_URL
         bot.add_view(self.RefreshView(self))
 
     async def cog_load(self):
@@ -98,39 +114,40 @@ class Prime(commands.Cog):
     async def cog_unload(self):
         await self.pool.close()
 
-    async def fetch_and_upsert(self):
-        """Scrape la page et upserte toutes les primes sans supprimer quoi que ce soit."""
+    async def fetch_and_upsert(self, url: str = None):
+        target = url or self.current_url
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
-            async with sess.get(PRIME_URL) as resp:
+            async with sess.get(target) as resp:
                 if resp.status != 200:
-                    raise RuntimeError(f"HTTP {resp.status} pour {PRIME_URL}")
+                    raise RuntimeError(f"HTTP {resp.status} sur {target}")
                 html = await resp.text()
 
-        # Récupère toutes les lignes de type "Nom – 1,234,567 B"
         pattern = re.compile(r"([^\-<>\r\n]+?)\s*[–-]\s*([\d,]+)\s*B")
         rows = pattern.findall(html)
         if not rows:
             raise RuntimeError("Aucune prime trouvée dans le HTML")
 
-        data = [(name.strip(), int(bounty.replace(",", ""))) for name, bounty in rows]
-
+        data = [(n.strip(), int(b.replace(",", ""))) for n, b in rows]
         async with self.pool.acquire() as conn:
-            await conn.executemany("""
+            await conn.executemany(
+                """
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
                 ON CONFLICT(name) DO UPDATE
                   SET bounty = EXCLUDED.bounty
-            """, data)
+                """,
+                data
+            )
 
     async def get_all_primes(self):
         async with self.pool.acquire() as conn:
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        for record in await self.get_all_primes():
-            if name_matches(display_name, record["name"]):
-                return record["name"], record["bounty"]
+        for r in await self.get_all_primes():
+            if name_matches(display_name, r["name"]):
+                return r["name"], r["bounty"]
         return None, None
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
@@ -145,7 +162,6 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        # Effectif total
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
@@ -164,7 +180,6 @@ class Prime(commands.Cog):
                 for entry in entries:
                     if name_matches(m.display_name, entry):
                         val = primes_raw[entry]
-                        # Choix de la catégorie
                         if val >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif val >= QUOTAS["Dangereux"]:
@@ -177,13 +192,11 @@ class Prime(commands.Cog):
                             cat = "Fort"
                         else:
                             cat = "Faible"
-
                         fleet = get_fleet_emoji(m)
                         grp.append((fleet, m, val, EMOJI_FORCE[cat]))
                         classification[cat].append(f"{fleet}{m.mention}")
                         displayed.add(m.id)
                         break
-
             grp.sort(key=lambda x: x[2], reverse=True)
             text = "\n".join(
                 f"- {fleet}{member.mention} – 💰 `{val:,} B` – *{force}*"
@@ -192,7 +205,6 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label}", value=text, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        # Synthèse globale
         synth = []
         for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
@@ -238,16 +250,11 @@ class Prime(commands.Cog):
         @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
-
-            loading = await interaction.response.send_message("⏳ Actualisation…", ephemeral=True)
-            try:
-                await self.cog.fetch_and_upsert()
-                new_embed = await self.cog.build_embed(interaction.guild)
-                await interaction.message.edit(embed=new_embed, view=self)
-                await interaction.followup.edit_message(loading.id, content="✅ Primes actualisées.")
-            except Exception as e:
-                await interaction.followup.edit_message(loading.id, content=f"❌ Erreur : {e}")
+                return await interaction.response.send_message(
+                    "🚫 Réservé aux administrateurs.", ephemeral=True
+                )
+            # Ouvre la modal pour demander l’URL
+            await interaction.response.send_modal(URLModal(self.cog, interaction.message))
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Prime(bot))
