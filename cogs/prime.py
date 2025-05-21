@@ -9,8 +9,10 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
+# Préfixe fixe de l'URL GitBook
 URL_PREFIX = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/"
 
+# IDs et ordre des rôles
 ROLE_IDS = {
     "CAPITAINE":       1317851007358734396,
     "VICE_CAPITAINE":  1358079100203569152,
@@ -28,11 +30,13 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
+# Emojis de flotte
 FLEET_EMOJIS = {
     1371942480316203018: "<:1reflotte:1372158546531324004>",
     1371942559894736916: "<:2meflotte:1372158586951696455>",
 }
 
+# Seuils et emojis de classification
 QUOTAS = {
     "Très Dangereux": 1_150_000_000,
     "Dangereux":       300_000_000,
@@ -51,16 +55,19 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
+    """NFD + casefold → retire accents, met en minuscules, ne garde que a-z0-9 et espace."""
     nfkd = unicodedata.normalize("NFD", text).casefold()
     stripped = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", stripped)
 
 def name_matches(dname: str, entry: str) -> bool:
+    """Vérifie que chaque mot de dname apparaît dans entry après normalisation."""
     dn = normalize(dname).split()
     en = normalize(entry).split()
     return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
+    """Retourne l'emoji de flotte si le membre a l'un des rôles de flotte."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
@@ -73,6 +80,7 @@ class SlugModal(Modal):
         style=discord.TextStyle.short,
         required=True,
     )
+
     def __init__(self, cog: "Prime", message: discord.Message):
         super().__init__(title="Actualiser les primes")
         self.cog = cog
@@ -82,16 +90,14 @@ class SlugModal(Modal):
         slug = self.slug.value.strip()
         url  = URL_PREFIX + slug
         try:
+            # Mise à jour de la base
             await self.cog.fetch_and_upsert(url)
-            # build embeds
+            # Construction des deux embeds
             roles_embed, classif_embed = await self.cog.build_all_embeds(interaction.guild)
-
-            # 1) Édition du message initial : on remplace le texte par l’embed rôles, on retire la view
+            # Édition du message initial (embed rôles seul, plus de view)
             await self.message.edit(content=None, embed=roles_embed, view=None)
-
-            # 2) Envoi de la classification sous forme de second message, avec le bouton Actualiser
+            # Envoi du embed classification avec le bouton Actualiser
             await self.message.channel.send(embed=classif_embed, view=self.cog.RefreshView(self.cog))
-
             await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Échec mise à jour : {e}", ephemeral=True)
@@ -117,6 +123,7 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self, url: str):
+        """Scrape l’URL donnée, extrait les primes, et upserte en base."""
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
             async with sess.get(url) as resp:
@@ -126,7 +133,7 @@ class Prime(commands.Cog):
 
         rows = re.findall(r"([^\-<>\r\n]+?)\s*[–-]\s*([\d,]+)\s*B", html)
         if not rows:
-            raise RuntimeError("Aucune prime trouvée")
+            raise RuntimeError("Aucune prime trouvée dans le HTML")
 
         data = [(n.strip(), int(b.replace(",", ""))) for n, b in rows]
         async with self.pool.acquire() as conn:
@@ -149,6 +156,7 @@ class Prime(commands.Cog):
         return best if best[0] else (None, None)
 
     async def build_roles_embed(self, guild: discord.Guild) -> discord.Embed:
+        """Embed détaillant les primes par rôle."""
         rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
         entries    = sorted(primes_raw, key=lambda k: primes_raw[k], reverse=True)
@@ -165,20 +173,28 @@ class Prime(commands.Cog):
 
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
-            if not role: continue
+            if not role:
+                continue
             lines = []
             for m in role.members:
-                if m.id in displayed: continue
+                if m.id in displayed:
+                    continue
                 for e in entries:
                     if name_matches(m.display_name, e):
                         bounty = primes_raw[e]
                         # catégorie
-                        if bounty >= QUOTAS["Très Dangereux"]: cat="Très Dangereux"
-                        elif bounty >= QUOTAS["Dangereux"]: cat="Dangereux"
-                        elif bounty >= QUOTAS["Très Puissant"]: cat="Très Puissant"
-                        elif bounty >= QUOTAS["Puissant"]: cat="Puissant"
-                        elif bounty >= QUOTAS["Fort"]: cat="Fort"
-                        else: cat="Faible"
+                        if bounty >= QUOTAS["Très Dangereux"]:
+                            cat = "Très Dangereux"
+                        elif bounty >= QUOTAS["Dangereux"]:
+                            cat = "Dangereux"
+                        elif bounty >= QUOTAS["Très Puissant"]:
+                            cat = "Très Puissant"
+                        elif bounty >= QUOTAS["Puissant"]:
+                            cat = "Puissant"
+                        elif bounty >= QUOTAS["Fort"]:
+                            cat = "Fort"
+                        else:
+                            cat = "Faible"
                         mention = f"{get_fleet_emoji(m)}{m.mention}"
                         lines.append(f"- {mention} – 💰 `{bounty:,} B` – *{EMOJI_FORCE[cat]} {cat}*")
                         displayed.add(m.id)
@@ -190,34 +206,48 @@ class Prime(commands.Cog):
         return embed
 
     async def build_classification_embed(self, guild: discord.Guild) -> discord.Embed:
-        rows       = await self.get_all_primes()
+        """Embed de la classification globale, triée et chunkée par catégorie."""
+        rows = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
-        entries    = sorted(primes_raw, key=lambda k: primes_raw[k], reverse=True)
+        # trier entrées par prime décroissante
+        sorted_entries = sorted(primes_raw.items(), key=lambda kv: kv[1], reverse=True)
 
+        # remplir classification dans le bon ordre
         classification = {cat: [] for cat in QUOTAS}
-        for member in guild.members:
-            for e in entries:
-                if name_matches(member.display_name, e):
-                    bounty = primes_raw[e]
-                    if bounty >= QUOTAS["Très Dangereux"]: cat="Très Dangereux"
-                    elif bounty >= QUOTAS["Dangereux"]: cat="Dangereux"
-                    elif bounty >= QUOTAS["Très Puissant"]: cat="Très Puissant"
-                    elif bounty >= QUOTAS["Puissant"]: cat="Puissant"
-                    elif bounty >= QUOTAS["Fort"]: cat="Fort"
-                    else: cat="Faible"
-                    classification[cat].append(f"{get_fleet_emoji(member)}{member.mention}")
-                    break
+        for entry, bounty in sorted_entries:
+            if bounty >= QUOTAS["Très Dangereux"]:
+                cat = "Très Dangereux"
+            elif bounty >= QUOTAS["Dangereux"]:
+                cat = "Dangereux"
+            elif bounty >= QUOTAS["Très Puissant"]:
+                cat = "Très Puissant"
+            elif bounty >= QUOTAS["Puissant"]:
+                cat = "Puissant"
+            elif bounty >= QUOTAS["Fort"]:
+                cat = "Fort"
+            else:
+                cat = "Faible"
+
+            # cherche le member correspondant
+            member_obj = discord.utils.find(
+                lambda m: name_matches(m.display_name, entry),
+                guild.members
+            )
+            if member_obj:
+                mention = f"{get_fleet_emoji(member_obj)}{member_obj.mention}"
+                classification[cat].append(mention)
 
         embed = discord.Embed(
             title=f"📊 Classification Globale – {guild.name}",
             color=0x1abc9c
         )
 
-        # Un field par catégorie non vide
+        # un field par catégorie non vide, chunké en 10 mentions max
         for cat, mentions in classification.items():
-            if not mentions: continue
-            # on chunk par 10 pour ne pas dépasser
-            for chunk in [mentions[i:i+10] for i in range(0, len(mentions), 10)]:
+            if not mentions:
+                continue
+            for i in range(0, len(mentions), 10):
+                chunk = mentions[i:i+10]
                 embed.add_field(
                     name=f"{EMOJI_FORCE[cat]} {cat} ({len(mentions)})",
                     value=" ".join(chunk),
@@ -227,6 +257,7 @@ class Prime(commands.Cog):
         return embed
 
     async def build_all_embeds(self, guild: discord.Guild):
+        """Retourne [roles_embed, classification_embed]."""
         return [
             await self.build_roles_embed(guild),
             await self.build_classification_embed(guild)
@@ -235,7 +266,7 @@ class Prime(commands.Cog):
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — fait apparaître le bouton Actualiser pour saisir le slug."""
+        """!primes — affiche le bouton Actualiser pour démarrer."""
         await ctx.message.delete()
         await ctx.send(
             "Cliquez sur « 🔁 Actualiser » pour saisir l’identifiant de la page primes.",
@@ -245,7 +276,7 @@ class Prime(commands.Cog):
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
     async def prime_user(self, ctx: commands.Context):
-        """!prime — affiche votre prime + nom RP."""
+        """!prime — affiche votre prime et votre nom RP."""
         await ctx.message.delete()
         name, bounty = await self.find_prime_for(ctx.author.display_name)
         if bounty is None:
