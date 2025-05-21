@@ -2,14 +2,20 @@
 
 import os
 import re
-import aiohttp
 import unicodedata
+import aiohttp
 import asyncpg
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
 
+# URL de base GitBook et suffixe pour la version statique
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
+PRINT_SUFFIX = "/print.html"
+
+def _print_url(url: str) -> str:
+    """Retourne l’URL pointant vers la version statique /print.html."""
+    return url.rstrip("/") + PRINT_SUFFIX
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
@@ -29,13 +35,13 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
-# Flotte → emoji
+# Association rôle de flotte → emoji
 FLEET_EMOJIS = {
     1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
     1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
 }
 
-# Seuils de classification et emojis
+# Seuils de classification et emojis correspondants
 QUOTAS = {
     "Très Dangereux": 1_150_000_000,
     "Dangereux":       300_000_000,
@@ -54,16 +60,19 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
+    """Retire accents et caractères non alphanumériques pour comparaison."""
     txt = unicodedata.normalize("NFD", text).lower()
     txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", txt)
 
 def name_matches(dname: str, entry: str) -> bool:
+    """Vérifie que chaque mot du display_name est dans le entry scrappé."""
     dn = normalize(dname).split()
     en = normalize(entry).split()
     return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
+    """Retourne l'emoji de flotte si le membre a l'un des rôles de flotte."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
@@ -90,51 +99,48 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        # 1) Récupère le HTML complet de la page
-        async with aiohttp.ClientSession() as sess:
-            async with sess.get(PRIME_URL) as resp:
+        """Scrape la page GitBook, extrait les primes, et upserte en base."""
+        url = _print_url(PRIME_URL)
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as sess:
+            async with sess.get(url) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"HTTP {resp.status} en GET {url}")
                 html = await resp.text()
 
-        # 2) Extrait le segment entre "Liste des Primes" et la fin de la <ul>
+        # Extraction de la <ul> sous "Liste des Primes"
         m = re.search(r"Liste des Primes.*?<ul>(.*?)</ul>", html, flags=re.DOTALL)
         if not m:
             raise RuntimeError("Impossible de trouver la liste des primes dans le HTML")
-        ul_block = m.group(1)
+        block = m.group(1)
 
-        # 3) Récupère chaque <li>…</li> dans ce bloc
-        items = re.findall(r"<li>(.*?)</li>", ul_block, flags=re.DOTALL)
+        # Récupère chaque <li>…</li>
+        items = re.findall(r"<li>(.*?)</li>", block, flags=re.DOTALL)
         data = []
         for item in items:
-            # enlève d'éventuelles balises internes (<strong>, <span>, etc.)
             text = re.sub(r"<.*?>", "", item).strip()
-            # split sur le tiret long ou court
             if "–" in text:
                 name_part, bounty_part = map(str.strip, text.split("–", 1))
             else:
                 name_part, bounty_part = map(str.strip, text.split("-", 1))
-            # garde que les chiffres pour la prime
-            bounty_value = int(re.sub(r"[^\d]", "", bounty_part))
-            data.append((name_part, bounty_value))
+            bounty = int(re.sub(r"[^\d]", "", bounty_part))
+            data.append((name_part, bounty))
 
-        # 4) Upsert en base, sans jamais supprimer quoi que ce soit
+        # Upsert en base sans suppression préalable
         async with self.pool.acquire() as conn:
-            await conn.executemany(
-                """
+            await conn.executemany("""
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
                 ON CONFLICT (name) DO UPDATE
                   SET bounty = EXCLUDED.bounty
-                """,
-                data
-            )
+            """, data)
 
     async def get_all_primes(self):
         async with self.pool.acquire() as conn:
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        rows = await self.get_all_primes()
-        for r in rows:
+        for r in await self.get_all_primes():
             if name_matches(display_name, r["name"]):
                 return r["name"], r["bounty"]
         return None, None
@@ -151,6 +157,7 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
+        # Effectif total
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
@@ -158,6 +165,7 @@ class Prime(commands.Cog):
         displayed      = set()
         classification = {cat: [] for cat in EMOJI_FORCE}
 
+        # Parcours des rôles dans l'ordre défini
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -170,7 +178,7 @@ class Prime(commands.Cog):
                 for e in entries:
                     if name_matches(m.display_name, e):
                         val = primes_raw[e]
-                        # choisir la bonne catégorie
+                        # Détermination de la catégorie
                         if val >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif val >= QUOTAS["Dangereux"]:
@@ -198,11 +206,12 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label}", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
+        # Classification globale synthétisée
         lines = []
-        for cat in ("Très Dangereux","Dangereux","Très Puissant","Puissant", "Fort", "Faible"):
+        for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
             mentions = " ".join(classification[cat]) or "N/A"
-            lines.append(f"**{em}** ({len(classification[cat])}) : {mentions}")
+            lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
         embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
 
         return embed
@@ -210,16 +219,21 @@ class Prime(commands.Cog):
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
+        """!primes — met à jour la DB puis affiche l’embed avec bouton Actualiser."""
         await ctx.message.delete()
         loading = await ctx.send("⏳ Mise à jour des primes…")
-        await self.fetch_and_upsert()
-        embed = await self.build_embed(ctx.guild)
-        await loading.delete()
-        await ctx.send(embed=embed, view=self.RefreshView(self))
+        try:
+            await self.fetch_and_upsert()
+            embed = await self.build_embed(ctx.guild)
+            await loading.delete()
+            await ctx.send(embed=embed, view=self.RefreshView(self))
+        except Exception as e:
+            await loading.edit(content=f"❌ Échec mise à jour : {e}")
 
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
     async def prime_user(self, ctx: commands.Context):
+        """!prime — affiche votre prime + votre Nom RP."""
         await ctx.message.delete()
         entry, bounty = await self.find_prime_for(ctx.author.display_name)
         if bounty is None:
@@ -235,16 +249,26 @@ class Prime(commands.Cog):
             super().__init__(timeout=None)
             self.cog = cog
 
-        @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
+        @discord.ui.button(
+            label="🔁 Actualiser",
+            style=discord.ButtonStyle.secondary,
+            custom_id="refresh_primes"
+        )
         async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
+                return await interaction.response.send_message(
+                    "🚫 Réservé aux administrateurs.", ephemeral=True
+                )
 
-            await interaction.response.defer()
-            await self.cog.fetch_and_upsert()
-            new_embed = await self.cog.build_embed(interaction.guild)
-            await interaction.message.edit(embed=new_embed, view=self)
-            await interaction.followup.send("✅ Primes actualisées.", ephemeral=True)
+            # Message éphémère de chargement
+            loading = await interaction.response.send_message("⏳ Actualisation…", ephemeral=True)
+            try:
+                await self.cog.fetch_and_upsert()
+                new_embed = await self.cog.build_embed(interaction.guild)
+                await interaction.message.edit(embed=new_embed, view=self)
+                await interaction.followup.edit_message(loading.id, content="✅ Primes actualisées.")
+            except Exception as e:
+                await interaction.followup.edit_message(loading.id, content=f"❌ Erreur : {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Prime(bot))
