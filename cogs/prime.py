@@ -9,7 +9,6 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
-# Préfixe fixe de l'URL GitBook
 URL_PREFIX = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/"
 
 # Hiérarchie des rôles & icônes
@@ -32,8 +31,8 @@ ROLE_ORDER = [
 
 # Flotte → emoji
 FLEET_EMOJIS = {
-    1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
-    1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
+    1371942480316203018: "<:1reflotte:1372158546531324004>",
+    1371942559894736916: "<:2meflotte:1372158586951696455>",
 }
 
 # Seuils de classification et emojis
@@ -55,11 +54,18 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    txt = unicodedata.normalize("NFD", text).casefold()
-    txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
-    return re.sub(r"[^a-z0-9 ]+", "", txt)
+    """
+    On normalize en NFD + casefold (insensible à la casse et aux accents),
+    puis on ne garde que [a-z0-9 ].
+    """
+    nfkd = unicodedata.normalize("NFD", text).casefold()
+    return re.sub(r"[^a-z0-9 ]+", "", "".join(ch for ch in nfkd if not unicodedata.combining(ch)))
 
 def name_matches(dname: str, entry: str) -> bool:
+    """
+    Chaque mot de display_name doit exister parmi les tokens de entry,
+    tous deux normalisés.
+    """
     dn = normalize(dname).split()
     en = normalize(entry).split()
     return all(tok in en for tok in dn)
@@ -85,11 +91,11 @@ class SlugModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         slug = self.slug.value.strip()
-        url = URL_PREFIX + slug
+        url  = URL_PREFIX + slug
         try:
             await self.cog.fetch_and_upsert(url)
-            embed = await self.cog.build_embed(interaction.guild)
-            await self.message.edit(embed=embed, view=self.cog.RefreshView(self.cog))
+            new_embed = await self.cog.build_embed(interaction.guild)
+            await self.message.edit(embed=new_embed, view=self.cog.RefreshView(self.cog))
             await interaction.response.send_message("✅ Primes actualisées.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Échec mise à jour : {e}", ephemeral=True)
@@ -115,7 +121,9 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self, url: str):
-        """Scrape la page GitBook à l'URL donnée, upserte les primes."""
+        """
+        Scrape la page GitBook à l'URL fournie et upserte les primes.
+        """
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
             async with sess.get(url) as resp:
@@ -123,18 +131,20 @@ class Prime(commands.Cog):
                     raise RuntimeError(f"HTTP {resp.status} pour {url}")
                 html = await resp.text()
 
+        # On récupère tous les "Nom – 1,234,567 B"
         pattern = re.compile(r"([^\-<>\r\n]+?)\s*[–-]\s*([\d,]+)\s*B")
         rows = pattern.findall(html)
         if not rows:
             raise RuntimeError("Aucune prime trouvée dans le HTML")
 
-        data = [(n.strip(), int(b.replace(",", ""))) for n, b in rows]
+        data = [(name.strip(), int(bounty.replace(",", ""))) for name, bounty in rows]
         async with self.pool.acquire() as conn:
             await conn.executemany(
                 """
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
-                ON CONFLICT(name) DO UPDATE SET bounty = EXCLUDED.bounty
+                ON CONFLICT(name) DO UPDATE
+                  SET bounty = EXCLUDED.bounty
                 """,
                 data
             )
@@ -144,9 +154,9 @@ class Prime(commands.Cog):
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
-        for r in await self.get_all_primes():
-            if name_matches(display_name, r["name"]):
-                return r["name"], r["bounty"]
+        for record in await self.get_all_primes():
+            if name_matches(display_name, record["name"]):
+                return record["name"], record["bounty"]
         return None, None
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
@@ -161,6 +171,7 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
+        # Effectif total
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
@@ -172,6 +183,7 @@ class Prime(commands.Cog):
             role = guild.get_role(role_id)
             if not role:
                 continue
+
             grp = []
             for m in role.members:
                 if m.id in displayed:
@@ -179,6 +191,7 @@ class Prime(commands.Cog):
                 for entry in entries:
                     if name_matches(m.display_name, entry):
                         val = primes_raw[entry]
+                        # catégorie
                         if val >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif val >= QUOTAS["Dangereux"]:
@@ -191,11 +204,13 @@ class Prime(commands.Cog):
                             cat = "Fort"
                         else:
                             cat = "Faible"
+
                         fleet = get_fleet_emoji(m)
                         grp.append((fleet, m, val, EMOJI_FORCE[cat]))
                         classification[cat].append(f"{fleet}{m.mention}")
                         displayed.add(m.id)
                         break
+
             grp.sort(key=lambda x: x[2], reverse=True)
             text = "\n".join(
                 f"- {fleet}{member.mention} – 💰 `{val:,} B` – *{force}*"
@@ -204,22 +219,23 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label}", value=text, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        lines = []
+        synth = []
         for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
             mentions = " ".join(classification[cat]) or "N/A"
-            lines.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
-        embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
+            synth.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
+        embed.add_field(name="📊 Classification Globale", value="\n".join(synth), inline=False)
 
         return embed
 
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — lance une première mise à jour en demandant d’abord le slug."""
+        """
+        !primes — Demande le slug, scrape et affiche l’embed avec bouton Actualiser.
+        """
         await ctx.message.delete()
-        msg = await ctx.send("🔗 Entrez l’identifiant (slug) de la page primes :", view=self.RefreshView(self))
-        # Le RefreshView ouvre directement le modal ; on affiche juste ce message
+        initial = await ctx.send("Cliquez sur « 🔁 Actualiser » pour saisir le slug.", view=self.RefreshView(self))
 
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
