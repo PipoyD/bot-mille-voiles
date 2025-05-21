@@ -11,11 +11,10 @@ from discord.ui import View, Button
 
 # URL de base GitBook et suffixe pour la version statique
 PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
-PRINT_SUFFIX = "/print.html"
 
 def _print_url(url: str) -> str:
     """Retourne l’URL pointant vers la version statique /print.html."""
-    return url.rstrip("/") + PRINT_SUFFIX
+    return url.rstrip("/")
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
