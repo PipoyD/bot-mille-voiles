@@ -7,9 +7,9 @@ import unicodedata
 import asyncpg
 import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import View, Button, Modal, TextInput
 
-PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
+BASE_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel"
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
@@ -55,16 +55,39 @@ def get_fleet_emoji(member: discord.Member) -> str:
             return FLEET_EMOJIS[r.id]
     return ""
 
+class SuffixModal(Modal, title="Mettre à jour l'URL de primes"):
+    suffix = TextInput(
+        label="Fin d'URL",
+        placeholder="Ex : hybjaafrrbnajg",
+        max_length=64
+    )
+
+    def __init__(self, cog: "Prime", message: discord.Message):
+        super().__init__()
+        self.cog = cog
+        self.prime_message = message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Met à jour le suffix et relance l'upsert
+        new_suffix = self.suffix.value.strip()
+        self.cog.prime_url = f"{BASE_URL}/{new_suffix}"
+        await self.cog.fetch_and_upsert()
+        new_embed = await self.cog.build_embed(interaction.guild)
+
+        # Met à jour le message original
+        await self.prime_message.edit(embed=new_embed, view=self.cog.RefreshView(self.cog, self.prime_message))
+        await interaction.response.send_message("✅ URL mise à jour et primes rafraîchies.", ephemeral=True)
+
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot    = bot
-        self.db_url = os.getenv("DATABASE_URL")
-        self.pool   = None
-        # Enregistre la vue persistante pour le bouton Actualiser
-        bot.add_view(self.RefreshView(self))
+        self.bot       = bot
+        self.db_url    = os.getenv("DATABASE_URL")
+        self.pool      = None
+        self.prime_url = BASE_URL  # suffixe ajouté plus tard
+        # Enregistre la vue persistante
+        bot.add_view(self.RefreshView(self, None))
 
     async def cog_load(self):
-        # Initialise le pool Postgres et crée la table primes si nécessaire
         self.pool = await asyncpg.create_pool(self.db_url)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -78,36 +101,22 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        # Récupère le HTML et upsert les primes
         async with aiohttp.ClientSession() as sess:
-            async with sess.get(PRIME_URL) as resp:
+            async with sess.get(self.prime_url) as resp:
                 html = await resp.text()
-
         matches = re.findall(r"([^\-\n\r<>]+?)\s*-\s*([\d,]+)\s*B", html)
         data = [(n.strip(), int(a.replace(",", ""))) for n, a in matches]
-
         async with self.pool.acquire() as conn:
-            await conn.executemany(
-                """
+            await conn.executemany("""
                 INSERT INTO primes(name, bounty)
                 VALUES($1, $2)
                 ON CONFLICT (name) DO UPDATE
                   SET bounty = EXCLUDED.bounty
-                """,
-                data
-            )
+            """, data)
 
     async def get_all_primes(self):
         async with self.pool.acquire() as conn:
             return await conn.fetch("SELECT name, bounty FROM primes")
-
-    async def find_prime_for(self, display_name: str):
-        """Retourne le tuple (entry_name, bounty) ou (None, None)."""
-        rows = await self.get_all_primes()
-        for r in rows:
-            if name_matches(display_name, r["name"]):
-                return r["name"], r["bounty"]
-        return None, None
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
         rows       = await self.get_all_primes()
@@ -129,12 +138,10 @@ class Prime(commands.Cog):
         displayed      = set()
         classification = {"Puissant": [], "Fort": [], "Faible": []}
 
-        # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
                 continue
-
             grp = []
             for m in role.members:
                 if m.id in displayed:
@@ -150,7 +157,6 @@ class Prime(commands.Cog):
                         classification[cat].append(f"{fleet}{m.mention}")
                         displayed.add(m.id)
                         break
-
             grp.sort(key=lambda x: x[2], reverse=True)
             value = "\n".join(
                 f"- {fleet}{member.mention} – 💰 `{val:,} B` – {force}"
@@ -159,7 +165,6 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label} :", value=value, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        # Classification globale
         lines = []
         for cat in ("Puissant", "Fort", "Faible"):
             em       = EMOJI_FORCE[cat]
@@ -172,44 +177,32 @@ class Prime(commands.Cog):
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — met à jour la DB puis affiche l’embed avec bouton Actualiser."""
+        """!primes — met à jour puis affiche l’embed + bouton Actualiser."""
         await ctx.message.delete()
         loading = await ctx.send("⏳ Mise à jour des primes…")
         await self.fetch_and_upsert()
         embed = await self.build_embed(ctx.guild)
         await loading.delete()
-        await ctx.send(embed=embed, view=self.RefreshView(self))
-
-    @commands.command(name="prime")
-    @commands.has_role(ROLE_IDS["MEMBRE"])
-    async def prime_user(self, ctx: commands.Context):
-        """!prime — affiche votre prime + votre Nom RP."""
-        await ctx.message.delete()
-        entry, bounty = await self.find_prime_for(ctx.author.display_name)
-        if bounty is None:
-            return await ctx.send("❌ Prime introuvable pour votre Nom RP.", ephemeral=True)
-        await ctx.send(
-            f"📜 **Nom RP :** {entry}\n"
-            f"💰 **Prime :** `{bounty:,} B`",
-            ephemeral=True
-        )
+        # Passe le message à la vue pour l'édition future
+        view = self.RefreshView(self, None)
+        msg = await ctx.send(embed=embed, view=view)
+        # assigne le message dans la vue
+        view.prime_message = msg
 
     class RefreshView(View):
-        def __init__(self, cog: "Prime"):
+        def __init__(self, cog: "Prime", prime_message: discord.Message):
             super().__init__(timeout=None)
             self.cog = cog
+            self.prime_message = prime_message
 
         @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
         async def refresh(self, interaction: discord.Interaction, button: Button):
+            # ouvre la modal pour saisir le suffixe
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message(
-                    "🚫 Réservé aux administrateurs.", ephemeral=True
-                )
-            await interaction.response.defer()
-            await self.cog.fetch_and_upsert()
-            new_embed = await self.cog.build_embed(interaction.guild)
-            await interaction.message.edit(embed=new_embed, view=self)
-            await interaction.followup.send("✅ Primes actualisées.", ephemeral=True)
+                return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
+            # envoie la modal en passant message et cog
+            modal = SuffixModal(self.cog, interaction.message)
+            await interaction.response.send_modal(modal)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Prime(bot))
