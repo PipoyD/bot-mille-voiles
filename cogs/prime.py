@@ -32,8 +32,8 @@ ROLE_ORDER = [
 
 # Flotte → emoji
 FLEET_EMOJIS = {
-    1371942480316203018: "<:1reflotte:1372158546531324004>",  # Écarlate
-    1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
+    1371942480316203018: "<:1reflotte:1372158546531324004>",
+    1371942559894736916: "<:2meflotte:1372158586951696455>",
 }
 
 # Seuils de classification et emojis
@@ -55,24 +55,16 @@ EMOJI_FORCE = {
 }
 
 def normalize(text: str) -> str:
-    """
-    Insensible aux accents et à la casse : NFD + casefold,
-    ne garde que a-z, 0-9 et espace.
-    """
     nfkd = unicodedata.normalize("NFD", text).casefold()
     stripped = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9 ]+", "", stripped)
 
 def name_matches(dname: str, entry: str) -> bool:
-    """
-    Chaque mot dans dname doit apparaître parmi les tokens normalisés d'entry.
-    """
     dn = normalize(dname).split()
     en = normalize(entry).split()
     return all(tok in en for tok in dn)
 
 def get_fleet_emoji(member: discord.Member) -> str:
-    """Retourne l'emoji de flotte associé au membre, s’il existe."""
     for r in member.roles:
         if r.id in FLEET_EMOJIS:
             return FLEET_EMOJIS[r.id]
@@ -123,9 +115,6 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self, url: str):
-        """
-        Scrape la page GitBook à l'URL fournie et upserte les primes.
-        """
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
             async with sess.get(url) as resp:
@@ -138,7 +127,7 @@ class Prime(commands.Cog):
         if not rows:
             raise RuntimeError("Aucune prime trouvée dans le HTML")
 
-        data = [(name.strip(), int(bounty.replace(",", ""))) for name, bounty in rows]
+        data = [(name.strip(), int(b.replace(",", ""))) for name, b in rows]
         async with self.pool.acquire() as conn:
             await conn.executemany(
                 """
@@ -155,18 +144,21 @@ class Prime(commands.Cog):
             return await conn.fetch("SELECT name, bounty FROM primes")
 
     async def find_prime_for(self, display_name: str):
+        best_name = None
+        best_bounty = -1
         for record in await self.get_all_primes():
-            if name_matches(display_name, record["name"]):
-                return record["name"], record["bounty"]
-        return None, None
+            if name_matches(display_name, record["name"]) and record["bounty"] > best_bounty:
+                best_name = record["name"]
+                best_bounty = record["bounty"]
+        if best_name is None:
+            return None, None
+        return best_name, best_bounty
 
     async def build_embed(self, guild: discord.Guild) -> discord.Embed:
-        # Récupère toutes les primes
         rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
-        entries    = list(primes_raw.keys())
+        entries    = sorted(primes_raw.keys(), key=lambda k: primes_raw[k], reverse=True)
 
-        # Embed de base
         embed = discord.Embed(
             title=f"• Équipage : {guild.name} • ⚓",
             color=0x1abc9c
@@ -174,11 +166,9 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        # Fonction utilitaire pour tronquer à 1024 chars
         def safe_value(text: str) -> str:
             return text if len(text) <= 1024 else text[:1020] + "…"
 
-        # Effectif total
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=str(total), inline=False)
@@ -186,7 +176,6 @@ class Prime(commands.Cog):
         displayed      = set()
         classification = {cat: set() for cat in QUOTAS.keys()}
 
-        # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -199,7 +188,6 @@ class Prime(commands.Cog):
                 for entry in entries:
                     if name_matches(m.display_name, entry):
                         val = primes_raw[entry]
-                        # Catégorie
                         if val >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif val >= QUOTAS["Dangereux"]:
@@ -213,8 +201,7 @@ class Prime(commands.Cog):
                         else:
                             cat = "Faible"
 
-                        fleet   = get_fleet_emoji(m)
-                        mention = f"{fleet}{m.mention}"
+                        mention = f"{get_fleet_emoji(m)}{m.mention}"
                         lines.append(f"- {mention} – 💰 `{val:,} B` – *{EMOJI_FORCE[cat]}*")
                         classification[cat].add(mention)
                         displayed.add(m.id)
@@ -228,7 +215,7 @@ class Prime(commands.Cog):
             )
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        # Classification globale complète
+        # Classification globale : on n'affiche que les catégories non vides
         categories = [
             "Très Dangereux",
             "Dangereux",
@@ -240,23 +227,23 @@ class Prime(commands.Cog):
         global_lines = []
         for cat in categories:
             mentions = sorted(classification[cat])
-            mention_str = " ".join(mentions) if mentions else "N/A"
-            global_lines.append(f"{EMOJI_FORCE[cat]} **{cat}** ({len(mentions)}) : {mention_str}")
+            if not mentions:
+                continue
+            global_lines.append(f"{EMOJI_FORCE[cat]} **{cat}** ({len(mentions)}) : {' '.join(mentions)}")
 
-        embed.add_field(
-            name="📊 Classification Globale",
-            value=safe_value("\n".join(global_lines)),
-            inline=False
-        )
+        if global_lines:
+            embed.add_field(
+                name="📊 Classification Globale",
+                value=safe_value("\n".join(global_lines)),
+                inline=False
+            )
 
         return embed
 
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """
-        !primes — Demande le slug, scrape et affiche l’embed avec bouton Actualiser.
-        """
+        """!primes — Demande le slug, scrape et affiche l’embed avec bouton Actualiser."""
         await ctx.message.delete()
         await ctx.send(
             "Cliquez sur « 🔁 Actualiser » pour saisir l’identifiant de la page primes.",
