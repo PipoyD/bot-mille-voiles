@@ -37,9 +37,25 @@ FLEET_EMOJIS = {
     1371942559894736916: "<:2meflotte:1372158586951696455>",  # Azur
 }
 
-# Seuils d'aura et emojis
+# Seuils d’aura et emojis
 QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
 EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
+
+# Définition des rangs (nom, prime minimale)
+RANKS = [
+    ("Empereur Pirate Menace extrême",   3_200_000_000),
+    ("SuperNova Très Dangereux",         1_150_000_000),
+    ("Pirate de Rang Z Dangereux",         300_000_000),
+    ("Pirate de Rang S+ Très Puissant",    200_000_000),
+    ("Pirate de Rang S Très Puissant",     150_000_000),
+    ("Pirate de Rang A+ Puissant",          60_000_000),
+    ("Pirate de Rang A Puissant",           30_000_000),
+    ("Pirate de Rang B Fort",               15_000_000),
+    ("Pirate de Rang C Fort",                5_000_000),
+    ("Pirate de Rang D Faible",              1_000_000),
+    ("Pirate de Rang E Faible",                500_000),
+    ("Rookie Faible",                             0),
+]
 
 def normalize(text: str) -> str:
     txt = unicodedata.normalize("NFD", text).lower()
@@ -58,7 +74,7 @@ def get_fleet_emoji(member: discord.Member) -> str:
     return ""
 
 class SuffixModal(Modal, title="Mise à jour de l'URL de primes"):
-    suffix = TextInput(label="Fin d'URL", placeholder="ex: hybjaafrrbnajg", max_length=64)
+    suffix = TextInput(label="Fin d'URL", placeholder="e.g. hybjaafrrbnajg", max_length=64)
 
     def __init__(self, cog: "Prime", message: discord.Message):
         super().__init__()
@@ -66,12 +82,10 @@ class SuffixModal(Modal, title="Mise à jour de l'URL de primes"):
         self.prime_message = message
 
     async def on_submit(self, interaction: discord.Interaction):
-        # On met à jour l'URL et on refait le scrapping + upsert
         new_suffix = self.suffix.value.strip()
         self.cog.prime_url = f"{BASE_URL}/{new_suffix}"
         await self.cog.fetch_and_upsert()
         new_embed = await self.cog.build_embed(interaction.guild)
-        # Ré-édite le même message
         await self.prime_message.edit(embed=new_embed, view=self.cog.RefreshView(self.cog))
         await interaction.response.send_message("✅ URL mise à jour et primes actualisées !", ephemeral=True)
 
@@ -81,11 +95,9 @@ class Prime(commands.Cog):
         self.db_url    = os.getenv("DATABASE_URL")
         self.pool      = None
         self.prime_url = BASE_URL
-        # Enregistrement de la vue persistante dès le démarrage
         bot.add_view(self.RefreshView(self))
 
     async def cog_load(self):
-        # Création du pool et de la table
         self.pool = await asyncpg.create_pool(self.db_url)
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -99,11 +111,9 @@ class Prime(commands.Cog):
         await self.pool.close()
 
     async def fetch_and_upsert(self):
-        # On **efface** l'ancienne table pour ne garder que les primes du nouvel URL
+        # on vide et on remplit avec les nouvelles primes
         async with self.pool.acquire() as conn:
             await conn.execute("TRUNCATE primes")
-
-        # Scraping
         async with aiohttp.ClientSession() as sess:
             async with sess.get(self.prime_url) as resp:
                 html = await resp.text()
@@ -111,13 +121,12 @@ class Prime(commands.Cog):
         matches = re.findall(r"([^\-\n\r<>]+?)\s*-\s*([\d,]+)\s*B", html)
         data = [(n.strip(), int(a.replace(",", ""))) for n, a in matches]
 
-        # Insert fresh
         async with self.pool.acquire() as conn:
             await conn.executemany(
                 """
                 INSERT INTO primes(name, bounty)
-                  VALUES($1, $2)
-                ON CONFLICT (name) DO UPDATE
+                  VALUES($1,$2)
+                ON CONFLICT(name) DO UPDATE
                   SET bounty = EXCLUDED.bounty
                 """,
                 data
@@ -145,7 +154,7 @@ class Prime(commands.Cog):
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
 
-        # Effectif total = membres avec rôle "MEMBRE"
+        # Effectif total
         membre_role = guild.get_role(ROLE_IDS["MEMBRE"])
         total = len(membre_role.members) if membre_role else 0
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
@@ -156,20 +165,20 @@ class Prime(commands.Cog):
         # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
-            if not role: 
+            if not role:
                 continue
 
             grp = []
             for m in role.members:
-                if m.id in displayed: 
+                if m.id in displayed:
                     continue
                 for e in entries:
                     if name_matches(m.display_name, e):
                         val = primes_raw[e]
                         cat = (
-                            "Puissant" if val >= QUOTAS["Puissant"] else
-                            "Fort"     if val >= QUOTAS["Fort"]     else
-                            "Faible"
+                            "Puissant" if val >= QUOTAS["Puissant"]
+                            else "Fort"     if val >= QUOTAS["Fort"]
+                            else "Faible"
                         )
                         fleet = get_fleet_emoji(m)
                         grp.append((fleet, m, val, EMOJI_FORCE[cat]))
@@ -184,28 +193,48 @@ class Prime(commands.Cog):
             ) or "N/A"
             embed.add_field(name=f"{emoji_role} {label}", value=lines, inline=False)
 
-        # Classification globale
-        lines = []
+        # Classification globale (aura)
+        aura_lines = []
         for cat in ("Puissant", "Fort", "Faible"):
-            em, lst = EMOJI_FORCE[cat], classification[cat]
-            mentions = " ".join(lst) or "N/A"
-            lines.append(f"{em} **{cat}** ({len(lst)}) : {mentions}")
-        embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
+            em   = EMOJI_FORCE[cat]
+            lst  = classification[cat] or ["N/A"]
+            aura_lines.append(f"{em} **{cat}** ({len(lst)}) : {' '.join(lst)}")
+        embed.add_field(name="📊 Classification Globale", value="\n".join(aura_lines), inline=False)
+
+        # Rangs & Auras
+        id_to_bounty = {}
+        for m in guild.members:
+            for e in entries:
+                if name_matches(m.display_name, e):
+                    id_to_bounty[m.id] = primes_raw[e]
+                    break
+
+        ranks_members = {name: [] for name, _ in RANKS}
+        for m in guild.members:
+            bounty = id_to_bounty.get(m.id)
+            if bounty is None:
+                continue
+            for name, thresh in RANKS:
+                if bounty >= thresh:
+                    fleet = get_fleet_emoji(m)
+                    ranks_members[name].append(f"{fleet}{m.mention}")
+                    break
+
+        rank_lines = []
+        for name, _ in RANKS:
+            lst = ranks_members[name] or ["N/A"]
+            rank_lines.append(f"**{name}** ({len(lst)}) : {' '.join(lst)}")
+        embed.add_field(name="🏷️ Rangs & Auras", value="\n".join(rank_lines), inline=False)
 
         return embed
 
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """
-        !primes — affiche l'embed et le bouton Actualiser.
-        À chaque clic, on demandera à nouveau la fin de l'URL et on purge/rafraîchit la table.
-        """
+        """!primes — affiche l’embed + 🔁 (admin only)."""
         await ctx.message.delete()
-
-        # Si jamais configuré, on propose directement le bouton
         embed = discord.Embed(
-            description="Cliquez sur 🔁 pour saisir la fin de l'URL et actualiser.",
+            description="Cliquez sur 🔁 pour saisir la fin de l'URL et actualiser !",
             color=0x3498db
         )
         await ctx.send(embed=embed, view=self.RefreshView(self))
@@ -231,10 +260,8 @@ class Prime(commands.Cog):
 
         @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
         async def refresh(self, interaction: discord.Interaction, button: Button):
-            # Réservé aux admins
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("🚫 Admins only", ephemeral=True)
-            # Ouvre à chaque fois la modal de suffixe
             await interaction.response.send_modal(SuffixModal(self.cog, interaction.message))
 
 async def setup(bot: commands.Bot):
