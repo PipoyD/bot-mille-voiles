@@ -18,6 +18,12 @@ ILE_COFFRES = {
         {"desc": "Ruelle diagonale à droite du bar [6/7]", "img": "https://i.imgur.com/WHcRTW2.png"},
         {"desc": "Maison du Phare [7/7]", "img": "https://i.imgur.com/vvKqaX3.png"},
     ],
+    "Baratie": [
+        {"desc": "Extérieur gauche du bateau", "img": "https://imgur.com/VBTn8mu.png"},
+        {"desc": "Derrière le bar du restaurant", "img": "https://imgur.com/mF8THbK.png"},
+        {"desc": "A droite de la cuisine à l'étage", "img": "https://imgur.com/uTJ9k5K.png"},
+        {"desc": "Chambre en face de la cuisine", "img": "https://imgur.com/LRLN5mH.png"},
+    ],
     "Arlong Park": [
         {"desc": "Sous le pont cassé", "img": "https://example.com/image1.jpg"},
         {"desc": "Derrière la statue de requin", "img": "https://example.com/image2.jpg"},
