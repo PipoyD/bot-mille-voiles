@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 
-PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/hybjaafrrbnajg"
+PRIME_URL = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/gvednstndtrsdd"
 
 # Hiérarchie des rôles & icônes
 ROLE_IDS = {
