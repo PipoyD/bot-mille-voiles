@@ -36,8 +36,8 @@ FLEET_EMOJIS = {
 }
 
 # Seuils de classification et emojis
-QUOTAS      = {"Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 1_000_000}
-EMOJI_FORCE = {"Puissant": "🔥", "Fort": "⚔️", "Faible": "💀"}
+QUOTAS      = {"Très Dangereux": 1_150_000_000, "Dangereux": 300_000_000, "Très Puissant": 150_000_000, "Puissant": 30_000_000, "Fort": 5_000_000, "Faible": 0}
+EMOJI_FORCE = {"Très Dangereux": "🏹 Très Dangereux","Dangereux": "🏹 Dangereux","Très Puissant": "🔥 Très Puissant","Puissant": "🔥 Puissant", "Fort": "⚔️ Fort", "Faible": "💀 Faible"}
 
 def normalize(text: str) -> str:
     txt = unicodedata.normalize("NFD", text).lower()
