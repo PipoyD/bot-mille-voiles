@@ -73,7 +73,7 @@ def get_fleet_emoji(member: discord.Member) -> str:
 class SlugModal(Modal):
     slug = TextInput(
         label="Identifiant de la page primes (slug)",
-        placeholder="gvednstndtrsdd",
+        placeholder="Ex : https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/ -> hybjaafrrbnajg <-",
         style=discord.TextStyle.short,
         required=True,
     )
