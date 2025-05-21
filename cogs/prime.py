@@ -177,8 +177,10 @@ class Prime(commands.Cog):
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
         displayed      = set()
-        classification = {cat: [] for cat in EMOJI_FORCE}
+        # On utilise un set pour éviter les doublons
+        classification = {cat: set() for cat in QUOTAS.keys()}
 
+        # Construction par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
             role = guild.get_role(role_id)
             if not role:
@@ -191,7 +193,7 @@ class Prime(commands.Cog):
                 for entry in entries:
                     if name_matches(m.display_name, entry):
                         val = primes_raw[entry]
-                        # catégorie
+                        # Choix de la catégorie
                         if val >= QUOTAS["Très Dangereux"]:
                             cat = "Très Dangereux"
                         elif val >= QUOTAS["Dangereux"]:
@@ -206,8 +208,9 @@ class Prime(commands.Cog):
                             cat = "Faible"
 
                         fleet = get_fleet_emoji(m)
+                        mention = f"{fleet}{m.mention}"
                         grp.append((fleet, m, val, EMOJI_FORCE[cat]))
-                        classification[cat].append(f"{fleet}{m.mention}")
+                        classification[cat].add(mention)
                         displayed.add(m.id)
                         break
 
@@ -219,12 +222,24 @@ class Prime(commands.Cog):
             embed.add_field(name=f"{emoji_role} {label}", value=text, inline=False)
             embed.add_field(name="\u200b", value="__________________", inline=False)
 
-        synth = []
-        for cat in ("Puissant", "Fort", "Faible"):
-            em       = EMOJI_FORCE[cat]
-            mentions = " ".join(classification[cat]) or "N/A"
-            synth.append(f"{em} **{cat}** ({len(classification[cat])}) : {mentions}")
-        embed.add_field(name="📊 Classification Globale", value="\n".join(synth), inline=False)
+        # --- Classification globale complète ---
+        categories = [
+            "Très Dangereux",
+            "Dangereux",
+            "Très Puissant",
+            "Puissant",
+            "Fort",
+            "Faible",
+        ]
+        lines = []
+        for cat in categories:
+            mentions = list(classification[cat])
+            if mentions:
+                mention_str = " ".join(sorted(mentions))
+            else:
+                mention_str = "N/A"
+            lines.append(f"{EMOJI_FORCE[cat]} **{cat}** ({len(mentions)}) : {mention_str}")
+        embed.add_field(name="📊 Classification Globale", value="\n".join(lines), inline=False)
 
         return embed
 
