@@ -127,7 +127,7 @@ class Prime(commands.Cog):
         embed.add_field(name="Effectif total", value=f"{total} membres", inline=False)
 
         displayed      = set()
-        classification = {"Puissant": [], "Fort": [], "Faible": []}
+        classification = {"Très Dangereux": [],"Dangereux": [],"Très Puissant": [],"Puissant": [], "Fort": [], "Faible": []}
 
         # Sections par rôle
         for role_id, emoji_role, label in ROLE_ORDER:
@@ -153,7 +153,7 @@ class Prime(commands.Cog):
 
             grp.sort(key=lambda x: x[2], reverse=True)
             value = "\n".join(
-                f"- {fleet}{member.mention} – 💰 {val:,} B – {force}"
+                f"- {fleet}{member.mention} – 💰 ```{val:,} B``` – *{force}*"
                 for fleet, member, val, force in grp
             ) or "N/A"
             embed.add_field(name=f"{emoji_role} {label} :", value=value, inline=False)
