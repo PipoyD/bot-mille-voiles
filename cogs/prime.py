@@ -9,8 +9,10 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
+# Préfixe fixe de l'URL GitBook
 URL_PREFIX = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/"
 
+# IDs et ordre des rôles
 ROLE_IDS = {
     "CAPITAINE":       1317851007358734396,
     "VICE_CAPITAINE":  1358079100203569152,
@@ -28,11 +30,13 @@ ROLE_ORDER = [
     (ROLE_IDS["MEMBRE"],          "⚓", "Membre d’équipage"),
 ]
 
+# Emojis de flotte
 FLEET_EMOJIS = {
     1371942480316203018: "<:1reflotte:1372158546531324004>",
     1371942559894736916: "<:2meflotte:1372158586951696455>",
 }
 
+# Seuils et emojis de classification
 QUOTAS = {
     "Très Dangereux": 1_150_000_000,
     "Dangereux":       300_000_000,
@@ -42,8 +46,8 @@ QUOTAS = {
     "Faible":                   0,
 }
 EMOJI_FORCE = {
-    "Très Dangereux": "🌹",
-    "Dangereux":      "🌹",
+    "Très Dangereux": "🏹",
+    "Dangereux":      "🏹",
     "Très Puissant":  "🔥",
     "Puissant":       "🔥",
     "Fort":           "⚔️",
@@ -84,19 +88,18 @@ class SlugModal(Modal):
         slug = self.slug.value.strip()
         url  = URL_PREFIX + slug
         try:
+            # 1) Met à jour la base de données
             await self.cog.fetch_and_upsert(url)
+            # 2) Reconstruit les deux embeds
             new_roles   = await self.cog.build_roles_embed(interaction.guild)
             new_classif = await self.cog.build_classification_embed(interaction.guild)
+            # 3) Édite les deux messages en place
             await self.roles_msg.edit(embed=new_roles)
             await self.classif_msg.edit(embed=new_classif, view=self.cog.RefreshView(self.cog, self.roles_msg, self.classif_msg))
+            # 4) Feedback à l'admin
             await interaction.response.send_message("✅ Primes et classification actualisées.", ephemeral=True)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            await interaction.response.send_message(
-                f"❌ Erreur lors de la mise à jour.\nType : `{type(e).__name__}`\nDétail : `{e}`",
-                ephemeral=True
-            )
+            await interaction.response.send_message(f"❌ Échec mise à jour : {e}", ephemeral=True)
 
 class Prime(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -197,7 +200,7 @@ class Prime(commands.Cog):
                         break
 
             grp.sort(key=lambda x: x[0], reverse=True)
-            lines = [f"- {mn} – 💰 `{b:,} B` – *{ft}*"
+            lines = [f"- {mn} – 💰 {b:,} B – *{ft}*"
                      for b, mn, ft in grp]
             txt = "\n".join(lines) or "N/A"
             embed.add_field(name=f"{emoji_role} {label}", value=safe(txt), inline=False)
@@ -277,7 +280,7 @@ class Prime(commands.Cog):
         await ctx.message.delete()
         async with self.pool.acquire() as conn:
             await conn.execute("DELETE FROM primes")
-        await ctx.send("✅ Table `primes` vidée.", delete_after=5)
+        await ctx.send("✅ Table primes vidée.", delete_after=5)
 
     class RefreshView(View):
         def __init__(self, cog: "Prime", roles_msg: discord.Message, classif_msg: discord.Message):
