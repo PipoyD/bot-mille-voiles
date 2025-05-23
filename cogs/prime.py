@@ -10,7 +10,7 @@ from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
 # Préfixe fixe de l'URL GitBook
-URL_PREFIX = "https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/"
+URL_PREFIX = "https://cosmos-one-piece-v2.gitbook.io/piraterie/"
 
 # IDs et ordre des rôles
 ROLE_IDS = {
