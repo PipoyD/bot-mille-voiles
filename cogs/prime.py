@@ -69,33 +69,30 @@ def get_fleet_emoji(member: discord.Member) -> str:
 
 class SlugModal(Modal):
     slug = TextInput(
-        label="URL complète de la page primes",
-        placeholder="Ex : https://cosmos-one-piece-v2.gitbook.io/piraterie/primes-personnel/…",
+        label="Identifiant de la page primes",
+        placeholder="Mettre tout le lien.",
         style=discord.TextStyle.short,
         required=True,
     )
 
-    def __init__(self, cog: "Prime", roles_msg_id: int, classif_msg_id: int, channel_id: int):
+    def __init__(self, cog: "Prime", roles_msg: discord.Message, classif_msg: discord.Message):
         super().__init__(title="Actualiser les primes")
         self.cog = cog
-        self.roles_msg_id = roles_msg_id
-        self.classif_msg_id = classif_msg_id
-        self.channel_id = channel_id
+        self.roles_msg = roles_msg
+        self.classif_msg = classif_msg
 
     async def on_submit(self, interaction: discord.Interaction):
-        url = self.slug.value.strip()
+        slug = self.slug.value.strip()
+        url  = slug
         try:
             # 1) Met à jour la base de données
             await self.cog.fetch_and_upsert(url)
             # 2) Reconstruit les deux embeds
             new_roles   = await self.cog.build_roles_embed(interaction.guild)
             new_classif = await self.cog.build_classification_embed(interaction.guild)
-            # 3) Récupère et édite les deux messages
-            channel = self.cog.bot.get_channel(self.channel_id)
-            roles_msg   = await channel.fetch_message(self.roles_msg_id)
-            classif_msg = await channel.fetch_message(self.classif_msg_id)
-            await roles_msg.edit(embed=new_roles)
-            await classif_msg.edit(embed=new_classif, view=RefreshView(self.cog))
+            # 3) Édite les deux messages en place
+            await self.roles_msg.edit(embed=new_roles)
+            await self.classif_msg.edit(embed=new_classif, view=self.cog.RefreshView(self.cog, self.roles_msg, self.classif_msg))
             # 4) Feedback à l'admin
             await interaction.response.send_message("✅ Primes et classification actualisées.", ephemeral=True)
         except Exception as e:
@@ -153,6 +150,7 @@ class Prime(commands.Cog):
         return best if best[0] else (None, None)
 
     async def build_roles_embed(self, guild: discord.Guild) -> discord.Embed:
+        """Embed détaillant les primes par rôle, trié par prime décroissante."""
         rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
         entries    = sorted(primes_raw, key=lambda k: primes_raw[k], reverse=True)
@@ -208,6 +206,7 @@ class Prime(commands.Cog):
         return embed
 
     async def build_classification_embed(self, guild: discord.Guild) -> discord.Embed:
+        """Embed de la classification globale, uniquement pour les membres d’équipage."""
         rows       = await self.get_all_primes()
         primes_raw = {r["name"]: r["bounty"] for r in rows}
         sorted_entries = sorted(primes_raw.items(), key=lambda kv: kv[1], reverse=True)
@@ -251,19 +250,15 @@ class Prime(commands.Cog):
     @commands.command(name="primes")
     @commands.has_permissions(administrator=True)
     async def primes(self, ctx: commands.Context):
-        """!primes — envoie les deux embeds et attache le bouton Actualiser (persistant)."""
+        """!primes — envoie les deux embeds et attache le bouton Actualiser."""
         await ctx.message.delete()
         roles_embed   = await self.build_roles_embed(ctx.guild)
         classif_embed = await self.build_classification_embed(ctx.guild)
 
         roles_msg   = await ctx.send(embed=roles_embed)
-        view        = RefreshView(self)
+        view        = self.RefreshView(self, roles_msg, None)
         classif_msg = await ctx.send(embed=classif_embed, view=view)
-
-        # On stocke les IDs initiaux pour fallback
-        view.initial_roles_msg_id   = roles_msg.id
-        view.initial_classif_msg_id = classif_msg.id
-        view.initial_channel_id     = ctx.channel.id
+        view.classif_msg = classif_msg  # lie la view au message de classification
 
     @commands.command(name="prime")
     @commands.has_role(ROLE_IDS["MEMBRE"])
@@ -284,46 +279,18 @@ class Prime(commands.Cog):
             await conn.execute("DELETE FROM primes")
         await ctx.send("✅ Table primes vidée.", delete_after=5)
 
-class RefreshView(View):
-    def __init__(self, cog: Prime):
-        super().__init__(timeout=None)
-        self.cog = cog
-        # fallback IDs (seront renseignés dans primes())
-        self.initial_roles_msg_id   = None
-        self.initial_classif_msg_id = None
-        self.initial_channel_id     = None
+    class RefreshView(View):
+        def __init__(self, cog: "Prime", roles_msg: discord.Message, classif_msg: discord.Message):
+            super().__init__(timeout=None)
+            self.cog = cog
+            self.roles_msg = roles_msg
+            self.classif_msg = classif_msg
 
-        button = Button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
-        async def callback(interaction: discord.Interaction, button: Button):
+        @discord.ui.button(label="🔁 Actualiser", style=discord.ButtonStyle.secondary, custom_id="refresh_primes")
+        async def refresh(self, interaction: discord.Interaction, button: Button):
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("🚫 Réservé aux administrateurs.", ephemeral=True)
-
-            channel      = interaction.channel
-            classif_msg  = interaction.message
-
-            # on cherche le message des rôles juste avant
-            roles_msg = None
-            async for msg in channel.history(before=classif_msg.id, limit=1):
-                roles_msg = msg
-
-            # fallback sur les IDs initiaux si on ne le trouve pas dynamiquement
-            if roles_msg is None and self.initial_roles_msg_id:
-                roles_msg = await channel.fetch_message(self.initial_roles_msg_id)
-                classif_msg = await channel.fetch_message(self.initial_classif_msg_id)
-
-            await interaction.response.send_modal(
-                SlugModal(
-                    self.cog,
-                    roles_msg.id if roles_msg else self.initial_roles_msg_id,
-                    classif_msg.id,
-                    channel.id
-                )
-            )
-
-        button.callback = callback
-        self.add_item(button)
+            await interaction.response.send_modal(SlugModal(self.cog, self.roles_msg, self.classif_msg))
 
 async def setup(bot: commands.Bot):
-    cog = Prime(bot)
-    await bot.add_cog(cog)
-    bot.add_view(RefreshView(cog))
+    await bot.add_cog(Prime(bot))
