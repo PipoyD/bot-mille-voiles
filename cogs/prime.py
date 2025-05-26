@@ -238,8 +238,8 @@ class Prime(commands.Cog):
         for cat, mentions in classification.items():
             if not mentions:
                 continue
-            for i in range(0, len(mentions), 10):
-                chunk = mentions[i : i + 10]
+            for i in range(0, len(mentions), 15):
+                chunk = mentions[i : i + 15]
                 embed.add_field(
                     name=f"{EMOJI_FORCE[cat]} {cat} ({len(mentions)})",
                     value=" ".join(chunk),
