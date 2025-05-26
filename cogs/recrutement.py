@@ -230,12 +230,12 @@ class VoteView(View):
         await interaction.response.defer()
 
     async def _schedule_deletions(self, embed_msg: discord.Message, verdict_msg: discord.Message):
-        await asyncio.sleep(86400)
+        await asyncio.sleep(1800)
         try:
             await embed_msg.delete()
         except:
             pass
-        await asyncio.sleep(86400)
+        await asyncio.sleep(1800)
         try:
             await verdict_msg.delete()
         except:
